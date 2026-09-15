@@ -1,12 +1,443 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="refresh" content="0;url=https://ahead-obscurity-swinging.ngrok-free.dev">
-<script>window.location.href = "https://ahead-obscurity-swinging.ngrok-free.dev";</script>
-<title>LËGĚNDÃRY BØT — Redirecting...</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LËGĒNDÃRY — Pair your WhatsApp bot</title>
+<meta name="description" content="Link your number to LËGĒNDÃRY BØT in seconds.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#06070D;
+    --panel:#10132A;
+    --panel-line:#1E2140;
+    --accent:#8B7CFF;
+    --accent-soft:#8B7CFF33;
+    --live:#35E6C8;
+    --text:#ECEAF7;
+    --muted:#6B6E85;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{
+    background:var(--bg);
+    color:var(--text);
+    font-family:'Inter',sans-serif;
+    overflow-x:hidden;
+    min-height:100vh;
+    position:relative;
+  }
+  canvas#orbs{
+    position:fixed; inset:0; width:100%; height:100%; z-index:0;
+  }
+  .wrap{
+    position:relative; z-index:1;
+    max-width:560px; margin:0 auto;
+    padding:9vh 24px 6vh;
+    display:flex; flex-direction:column; align-items:center;
+    text-align:center;
+  }
+  .mark{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:700;
+    font-size:clamp(2.1rem, 6vw, 3rem);
+    letter-spacing:0.01em;
+    opacity:0; transform:translateY(14px);
+    animation:rise .7s cubic-bezier(.2,.8,.2,1) forwards;
+  }
+  .mark span{color:var(--accent);}
+  .tagline{
+    margin-top:10px;
+    color:var(--muted);
+    font-size:1.02rem;
+    max-width:34ch;
+    line-height:1.5;
+    opacity:0; transform:translateY(14px);
+    animation:rise .7s cubic-bezier(.2,.8,.2,1) .1s forwards;
+  }
+  .card{
+    margin-top:48px;
+    width:100%;
+    background:linear-gradient(180deg, var(--panel), #0C0E22);
+    border:1px solid var(--panel-line);
+    border-radius:18px;
+    padding:32px 28px;
+    text-align:left;
+    opacity:0; transform:translateY(14px);
+    animation:rise .7s cubic-bezier(.2,.8,.2,1) .2s forwards;
+    box-shadow:0 30px 60px -30px #00000090;
+  }
+  .card h2{
+    font-family:'Space Grotesk',sans-serif;
+    font-size:1.15rem;
+    font-weight:600;
+  }
+  .card p.sub{
+    color:var(--muted);
+    font-size:.92rem;
+    margin-top:6px;
+    line-height:1.5;
+  }
+  .field{
+    margin-top:22px;
+    display:flex;
+    border:1px solid var(--panel-line);
+    border-radius:12px;
+    overflow:hidden;
+    background:#0A0C1E;
+    transition:border-color .2s ease;
+  }
+  .field:focus-within{border-color:var(--accent);}
+  .field .prefix{
+    display:flex; align-items:center;
+    padding:0 14px;
+    color:var(--muted);
+    font-family:'JetBrains Mono',monospace;
+    font-size:.9rem;
+    border-right:1px solid var(--panel-line);
+  }
+  .field input{
+    flex:1;
+    background:none; border:none; outline:none;
+    color:var(--text);
+    font-size:1rem;
+    padding:14px 14px;
+    font-family:'Inter',sans-serif;
+  }
+  .field input::placeholder{color:#3D4066;}
+  button.primary{
+    margin-top:16px;
+    width:100%;
+    padding:14px;
+    border:none;
+    border-radius:12px;
+    background:var(--accent);
+    color:#0A0620;
+    font-weight:600;
+    font-size:1rem;
+    font-family:'Inter',sans-serif;
+    cursor:pointer;
+    transition:filter .15s ease, transform .05s ease;
+  }
+  button.primary:hover{filter:brightness(1.08);}
+  button.primary:active{transform:scale(.99);}
+  button.primary:disabled{opacity:.5; cursor:default;}
+  .hint{
+    margin-top:12px;
+    font-size:.82rem;
+    color:var(--muted);
+  }
+  .error{
+    margin-top:12px;
+    font-size:.85rem;
+    color:#FF7A85;
+    display:none;
+  }
+  .code-box{
+    display:none;
+    margin-top:22px;
+    text-align:center;
+    border:1px solid var(--panel-line);
+    border-radius:12px;
+    padding:22px 16px;
+    background:#0A0C1E;
+  }
+  .code-box .label{
+    font-size:.78rem;
+    color:var(--muted);
+  }
+  .code-value{
+    margin-top:10px;
+    font-family:'JetBrains Mono',monospace;
+    font-weight:600;
+    font-size:1.6rem;
+    letter-spacing:0.08em;
+    color:var(--live);
+    min-height:1.6rem;
+  }
+  .code-value .cursor{
+    display:inline-block;
+    width:2px; height:1.1em;
+    background:var(--live);
+    margin-left:2px;
+    vertical-align:-2px;
+    animation:blink 1s step-end infinite;
+  }
+  .steps{
+    margin-top:16px;
+    font-size:.85rem;
+    color:var(--muted);
+    line-height:1.7;
+    text-align:left;
+  }
+  .steps b{color:var(--text); font-weight:500;}
+  .status-line{
+    margin-top:16px;
+    font-family:'JetBrains Mono',monospace;
+    font-size:.78rem;
+    color:var(--muted);
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .dot{
+    width:7px; height:7px; border-radius:50%;
+    background:var(--muted);
+  }
+  .dot.waiting{background:var(--accent); animation:pulse 1.4s ease-in-out infinite;}
+  .dot.live{background:var(--live);}
+  .success{
+    display:none;
+    margin-top:16px;
+    padding:14px;
+    border-radius:10px;
+    background:#35E6C81A;
+    border:1px solid #35E6C855;
+    color:var(--live);
+    font-size:.9rem;
+  }
+  .divider{
+    display:flex; align-items:center; gap:14px;
+    margin-top:36px; margin-bottom:0;
+    color:var(--muted);
+    font-size:.82rem;
+  }
+  .divider::before, .divider::after{
+    content:''; flex:1; height:1px; background:var(--panel-line);
+  }
+  .tg-link{
+    margin-top:18px;
+    display:flex; align-items:center; justify-content:center; gap:10px;
+    width:100%;
+    padding:13px;
+    border-radius:12px;
+    border:1px solid var(--panel-line);
+    color:var(--text);
+    text-decoration:none;
+    font-size:.95rem;
+    font-weight:500;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .tg-link:hover{border-color:#2AABEE; background:#2AABEE14;}
+  .tg-link svg{flex-shrink:0;}
+  footer{
+    margin-top:56px;
+    color:var(--muted);
+    font-size:.78rem;
+    font-family:'JetBrains Mono',monospace;
+    letter-spacing:.02em;
+    opacity:0; animation:rise .7s cubic-bezier(.2,.8,.2,1) .3s forwards;
+  }
+  @keyframes rise{to{opacity:1; transform:translateY(0);}}
+  @keyframes blink{50%{opacity:0;}}
+  @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.35;}}
+
+  @media (prefers-reduced-motion: reduce){
+    .mark,.tagline,.card,footer{animation:none; opacity:1; transform:none;}
+    .dot.waiting{animation:none;}
+    .code-value .cursor{animation:none;}
+    canvas#orbs{display:none;}
+  }
+
+  button.primary:focus-visible, .field input:focus-visible, .tg-link:focus-visible{
+    outline:2px solid var(--accent);
+    outline-offset:2px;
+  }
+</style>
 </head>
 <body>
-<p>Redirecting to pairing site...</p>
+
+<canvas id="orbs"></canvas>
+
+<div class="wrap">
+  <h1 class="mark">LË<span>GĒNDÃRY</span> BØT</h1>
+  <p class="tagline">Link your WhatsApp number and your bot goes live automatically — no code, no panel.</p>
+
+  <div class="card">
+    <h2>Pair your number</h2>
+    <p class="sub">Enter your WhatsApp number with country code, no plus sign, no spaces.</p>
+
+    <div class="field">
+      <span class="prefix">+</span>
+      <input id="numberInput" type="tel" inputmode="numeric" placeholder="234xxxxxxxxxx" autocomplete="tel" />
+    </div>
+    <button class="primary" id="pairBtn">Get pairing code</button>
+    <p class="error" id="errorMsg"></p>
+    <p class="hint">We'll show a one-time code — enter it in WhatsApp → Linked Devices.</p>
+
+    <div class="code-box" id="codeBox">
+      <div class="label">Your pairing code</div>
+      <div class="code-value" id="codeValue"><span class="cursor"></span></div>
+      <div class="steps">
+        <b>1.</b> Open WhatsApp → Settings → Linked Devices<br>
+        <b>2.</b> Tap <b>Link a Device</b> → <b>Link with phone number instead</b><br>
+        <b>3.</b> Enter the code above
+      </div>
+      <div class="status-line">
+        <span class="dot waiting" id="statusDot"></span>
+        <span id="statusText">waiting for confirmation on your phone…</span>
+      </div>
+      <div class="success" id="successBox">✅ Connected — your bot is live. You can close this page.</div>
+    </div>
+
+    <div class="divider">or pair via Telegram</div>
+    <a class="tg-link" href="https://t.me/Legendarywhatsapp_bot" target="_blank" rel="noopener">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="#2AABEE"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.57 8.16-1.72 8.13c-.13.58-.47.72-.96.45l-2.65-1.96-1.28 1.23c-.14.14-.26.26-.53.26l.19-2.69 4.9-4.43c.21-.19-.05-.3-.33-.11l-6.06 3.81-2.61-.82c-.57-.18-.58-.57.12-.84l10.2-3.93c.47-.17.89.11.73.9z"/></svg>
+      @Legendarywhatsapp_bot
+    </a>
+    <a class="tg-link" href="https://t.me/legendary001bot" target="_blank" rel="noopener" style="margin-top:10px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="#2AABEE"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.57 8.16-1.72 8.13c-.13.58-.47.72-.96.45l-2.65-1.96-1.28 1.23c-.14.14-.26.26-.53.26l.19-2.69 4.9-4.43c.21-.19-.05-.3-.33-.11l-6.06 3.81-2.61-.82c-.57-.18-.58-.57.12-.84l10.2-3.93c.47-.17.89.11.73.9z"/></svg>
+      @legendary001bot
+    </a>
+  </div>
+
+  <footer>legendary-lab · pairing v1</footer>
+</div>
+
+<script>
+// ---- config ----
+// Backend (Render) base URL — the frontend and backend are deployed
+// separately (Vercel + Render), so this can't be a relative path.
+const API_BASE = "https://legendary-bot-pairing.onrender.com";
+
+// ---- floating orbs background ----
+(function(){
+  const canvas = document.getElementById('orbs');
+  const ctx = canvas.getContext('2d');
+  let w, h, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  function resize(){
+    w = canvas.width = innerWidth * dpr;
+    h = canvas.height = innerHeight * dpr;
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+  }
+  resize();
+  addEventListener('resize', resize);
+
+  const colors = ['#8B7CFF', '#35E6C8', '#5B4FD9'];
+  const N = innerWidth < 640 ? 6 : 10;
+  const orbs = Array.from({length: N}, () => ({
+    x: Math.random() * innerWidth,
+    y: Math.random() * innerHeight,
+    r: (36 + Math.random() * 70) * dpr,
+    vx: (Math.random() - 0.5) * 0.15,
+    vy: (Math.random() - 0.5) * 0.15,
+    c: colors[Math.floor(Math.random() * colors.length)],
+    a: 0.06 + Math.random() * 0.08
+  }));
+
+  let mx = innerWidth/2, my = innerHeight/2;
+  addEventListener('pointermove', e => { mx = e.clientX; my = e.clientY; });
+
+  function frame(){
+    ctx.clearRect(0, 0, w, h);
+    for (const o of orbs) {
+      if (!reduced) {
+        o.x += o.vx + (mx*dpr - o.x) * 0.00004;
+        o.y += o.vy + (my*dpr - o.y) * 0.00004;
+        if (o.x < -o.r) o.x = w + o.r; if (o.x > w + o.r) o.x = -o.r;
+        if (o.y < -o.r) o.y = h + o.r; if (o.y > h + o.r) o.y = -o.r;
+      }
+      const g = ctx.createRadialGradient(o.x, o.y, 0, o.x, o.y, o.r);
+      g.addColorStop(0, o.c + Math.round(o.a*255).toString(16).padStart(2,'0'));
+      g.addColorStop(1, o.c + '00');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(o.x, o.y, o.r, 0, Math.PI*2);
+      ctx.fill();
+    }
+    requestAnimationFrame(frame);
+  }
+  frame();
+})();
+
+// ---- pairing flow ----
+const numberInput = document.getElementById('numberInput');
+const pairBtn = document.getElementById('pairBtn');
+const errorMsg = document.getElementById('errorMsg');
+const codeBox = document.getElementById('codeBox');
+const codeValue = document.getElementById('codeValue');
+const statusDot = document.getElementById('statusDot');
+const statusText = document.getElementById('statusText');
+const successBox = document.getElementById('successBox');
+
+let pollTimer = null;
+
+function typeCode(code){
+  codeValue.innerHTML = '';
+  let i = 0;
+  const cursor = document.createElement('span');
+  cursor.className = 'cursor';
+  function step(){
+    if (i <= code.length) {
+      codeValue.textContent = code.slice(0, i);
+      codeValue.appendChild(cursor);
+      i++;
+      setTimeout(step, 45);
+    }
+  }
+  step();
+}
+
+async function requestCode(){
+  const number = numberInput.value.replace(/[^0-9]/g, '');
+  errorMsg.style.display = 'none';
+
+  if (!number || number.length < 7) {
+    errorMsg.textContent = 'Enter a valid number with country code.';
+    errorMsg.style.display = 'block';
+    return;
+  }
+
+  pairBtn.disabled = true;
+  pairBtn.textContent = 'Generating code…';
+
+  try {
+    const res = await fetch(`${API_BASE}/pair`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ number })
+    });
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Something went wrong.');
+    }
+
+    codeBox.style.display = 'block';
+    typeCode(data.code || data.pairingCode || '----');
+    pairBtn.textContent = 'Code sent';
+    startPolling(number);
+  } catch (e) {
+    errorMsg.textContent = e.message || 'Could not reach the server. Try again.';
+    errorMsg.style.display = 'block';
+    pairBtn.disabled = false;
+    pairBtn.textContent = 'Get pairing code';
+  }
+}
+
+function startPolling(number){
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/status/${number}`);
+      const data = await res.json();
+      if (data.paired) {
+        clearInterval(pollTimer);
+        statusDot.className = 'dot live';
+        statusText.textContent = 'connected';
+        successBox.style.display = 'block';
+        pairBtn.textContent = 'Connected';
+      }
+    } catch {}
+  }, 3000);
+}
+
+pairBtn.addEventListener('click', requestCode);
+numberInput.addEventListener('keydown', e => { if (e.key === 'Enter') requestCode(); });
+</script>
 </body>
 </html>

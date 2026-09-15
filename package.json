@@ -1,0 +1,54 @@
+{
+  "name": "legendary-bot",
+  "version": "1.0.0",
+  "description": "LËGĒNDÃRY BØT — WhatsApp bot with Telegram pairing and web panel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "bot": "node bot.js",
+    "pair": "node telegramPairBot.js"
+  },
+  "dependencies": {
+    "@boruto_vk7/baileys": "latest",
+    "@distube/ytdl-core": "latest",
+    "@hapi/boom": "latest",
+    "axios": "latest",
+    "chalk": "^4.1.2",
+    "cloudflared": "latest",
+    "cors": "latest",
+    "dotenv": "latest",
+    "express": "^4.19.2",
+    "fluent-ffmpeg": "latest",
+    "form-data": "latest",
+    "fs-extra": "latest",
+    "google-tts-api": "latest",
+    "human-readable": "latest",
+    "isolated-vm": "latest",
+    "jimp": "latest",
+    "mal-scraper": "latest",
+    "moment-timezone": "latest",
+    "mongoose": "latest",
+    "node-webpmux": "latest",
+    "pdfkit": "latest",
+    "performance-now": "latest",
+    "pino": "latest",
+    "qrcode": "latest",
+    "sharp": "^0.35.4",
+    "telegraf": "latest",
+    "w5-textmaker": "latest",
+    "wa-sticker-formatter": "latest",
+    "yt-search": "latest",
+    "ytdl-core": "latest"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "allowScripts": {
+    "sharp@0.35.4": true,
+    "sharp@0.30.7": true,
+    "@boruto_vk7/baileys@1.0.28-rc14-eduh.0": true,
+    "cloudflared@0.7.3": true,
+    "isolated-vm@7.0.1": true,
+    "protobufjs@7.6.6": true
+  }
+}
