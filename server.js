@@ -395,8 +395,9 @@ app.post('/api/panel/deploy', express.json(), (req, res) => {
     const session = getSession(sessionId);
     if (!session) return res.status(404).json({ error: 'Invalid session ID' });
 
-    const result = instanceManager.deployInstance({
-        sessionId,
+    const result = instanceManager.deployInstanceFromPairing({
+        instanceId: sessionId,
+        authDir: session.authDir,
         botConfig: {
             ownerNumber: session.phoneNumber,
             ownerName: ownerName || 'Owner',
