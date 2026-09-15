@@ -1,1 +1,17 @@
-{}
+{
+  "sess_118a81809ff903f3b58a": {
+    "sessionId": "sess_118a81809ff903f3b58a",
+    "pid": 95,
+    "status": "running",
+    "deployedAt": "2026-09-15T19:02:47.876Z",
+    "botConfig": {
+      "ownerNumber": "2348137419241",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
+  }
+}
