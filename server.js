@@ -600,6 +600,14 @@ const githubSync = require('./githubSync');
     app.listen(PORT, async () => {
     console.log(`✅ LËGĚNDÃRY BØT Pairing Server running on port ${PORT}`);
 
+    // instances.json (who was deployed before this restart) was just pulled
+    // down by restoreFromGitHub() above — but nothing actually respawned
+    // those bots yet, so every paired user's bot would otherwise stay dead
+    // until someone manually redeploys via /api/panel/deploy. This wires
+    // that gap: restoreInstances() resets each stale "running" record and
+    // relaunches it for real, staggered so they don't all spawn at once.
+    instanceManager.restoreInstances();
+
     // Push local data back to GitHub every 5 minutes, plus once more
     // right before the process exits (Render sends SIGTERM before
     // stopping/redeploying), so the backup never lags behind by more
