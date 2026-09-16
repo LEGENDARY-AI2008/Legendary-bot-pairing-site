@@ -89,7 +89,13 @@ const FormData = require('form-data');
 const { Sticker, StickerTypes } = require('wa-sticker-formatter');
 const { smsg, tanggal, getTime, isUrl, sleep, clockString, runtime, fetchJson, getBuffer, jsonformat, format, parseMention, getRandom, getGroupAdmins, generateProfilePicture } = require('./allfunc/storage')
 const { imageToWebp, videoToWebp, writeExifImg, writeExifVid, addExif } = require('./allfunc/exif.js')
-const richpic = fs.readFileSync(`./media/image1.jpg`)
+const RICHPIC_PATH = require('path').join(__dirname, 'media', 'image1.jpg');
+let richpic = null;
+try {
+    richpic = fs.readFileSync(RICHPIC_PATH);
+} catch (e) {
+    console.log('⚠️ richpic image not loaded:', e.message);
+}
 // Menu banner image — safe/optional unlike richpic above (won't crash
 // startup if missing, since this is new and the file may not be placed
 // yet). Drop your image at ./media/menu-banner.jpg in the bot's project
