@@ -435,9 +435,16 @@ case "update": {
             fs.writeFileSync(path.join(__dirname, filename), newContent, 'utf-8');
         }
 
-        await reply("✅ *Update complete!* Restarting bot now...");
-        console.log(chalk.bgGreen.black("🔄 Files updated — restarting"));
-        process.exit(0); // Panel should auto-restart the process
+        await reply("✅ *Update complete!* Restarting all running bots now...");
+        console.log(chalk.bgGreen.black("🔄 Files updated — restarting all instances"));
+        try {
+            const { restartAllInstances } = require(path.join(__dirname, '..', 'instanceManager'));
+            restartAllInstances(); // staggers restarts across every running instance, this one included
+        } catch (e) {
+            // Fallback: at least restart the instance that ran .update.
+            console.log(chalk.red(`Couldn't reach instanceManager to restart all instances: ${e.message}`));
+            process.exit(0);
+        }
     } catch (e) {
         if (e.response?.status === 404) {
             return reply(`❌ *Update failed:* a file wasn't found in the repo (checked ${rawBase}/...). Make sure the filenames match exactly, the repo is public, and \`GITHUB_BRANCH\` is correct.`);
