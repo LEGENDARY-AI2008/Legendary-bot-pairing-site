@@ -78,5 +78,20 @@
     "intentionalStop": false,
     "crashCount": 6,
     "exitCode": 1
+  },
+  "sess_f30e17da456b463ca8aa": {
+    "sessionId": "sess_f30e17da456b463ca8aa",
+    "pid": 95,
+    "status": "running",
+    "deployedAt": "2026-09-16T08:17:53.572Z",
+    "botConfig": {
+      "ownerNumber": "2348137419241",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
   }
 }
