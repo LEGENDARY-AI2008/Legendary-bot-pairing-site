@@ -44,7 +44,13 @@ exports.getBuffer = async (url, options) => {
 		})
 		return res.data
 	} catch (err) {
-		return err
+		// FIX: was `return err` — silently handed the Error object back as
+		// if it were the image buffer. Every caller then tried to send that
+		// Error as an image, which failed invisibly deep inside Baileys
+		// instead of hitting the caller's own try/catch. Throwing here means
+		// every existing `catch (e) { reply(...) }` in the command files
+		// actually fires and shows a real error instead of "nothing sent".
+		throw err
 	}
 }
 
