@@ -161,9 +161,9 @@
   },
   "sess_96cec0aa157ca5603f4d": {
     "sessionId": "sess_96cec0aa157ca5603f4d",
-    "pid": 5904,
-    "status": "stopped",
-    "deployedAt": "2026-09-16T16:20:17.198Z",
+    "pid": 6580,
+    "status": "running",
+    "deployedAt": "2026-09-16T16:25:24.596Z",
     "botConfig": {
       "ownerNumber": "2347037356401",
       "ownerName": "WhatsApp User",
@@ -172,14 +172,13 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 1,
-    "exitCode": 1
+    "crashCount": 1
   },
   "sess_69305c2fe636cc96c0aa": {
     "sessionId": "sess_69305c2fe636cc96c0aa",
-    "pid": 5916,
-    "status": "running",
-    "deployedAt": "2026-09-16T16:20:22.804Z",
+    "pid": 6564,
+    "status": "stopped",
+    "deployedAt": "2026-09-16T16:25:16.997Z",
     "botConfig": {
       "ownerNumber": "2349128739057",
       "ownerName": "WhatsApp User",
@@ -188,6 +187,7 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 0
+    "crashCount": 1,
+    "exitCode": 1
   }
 }
