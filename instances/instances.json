@@ -161,9 +161,9 @@
   },
   "sess_96cec0aa157ca5603f4d": {
     "sessionId": "sess_96cec0aa157ca5603f4d",
-    "pid": 9132,
+    "pid": 9780,
     "status": "stopped",
-    "deployedAt": "2026-09-16T16:45:19.297Z",
+    "deployedAt": "2026-09-16T16:50:17.403Z",
     "botConfig": {
       "ownerNumber": "2347037356401",
       "ownerName": "WhatsApp User",
@@ -177,9 +177,9 @@
   },
   "sess_69305c2fe636cc96c0aa": {
     "sessionId": "sess_69305c2fe636cc96c0aa",
-    "pid": 9144,
+    "pid": 9792,
     "status": "running",
-    "deployedAt": "2026-09-16T16:45:24.297Z",
+    "deployedAt": "2026-09-16T16:50:25.099Z",
     "botConfig": {
       "ownerNumber": "2349128739057",
       "ownerName": "WhatsApp User",
