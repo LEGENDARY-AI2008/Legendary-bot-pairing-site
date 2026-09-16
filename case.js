@@ -1603,11 +1603,21 @@ Prefix works with every command below — e.g. .aisearch
 
         const footer = `\n\nTip: Use *.menu <category>* for a specific one\n⚡ ${botDisplayName} — LËGĚNDÃRY Ł𝗮𝗯𝘀™ ⚽`;
 
-        // Everything as ONE single message per user's request. Note: this was
-        // previously split into batches because a single ~23,000-char
-        // message was silently dropped by WhatsApp with no JS error. If
-        // .menu goes back to appearing to do nothing, that's likely why —
-        // keep an eye on it since this list covers hundreds of commands.
+        // FIX: WhatsApp image CAPTIONS have a much smaller size ceiling than
+        // plain TEXT messages. header already contains 4001 invisible
+        // "readmore" chars, and body is the full hundreds-of-commands list —
+        // together that's tens of thousands of chars. Putting all of that in
+        // an image caption made WhatsApp silently drop the whole message
+        // (image included), which is why .menu looked like it sent nothing.
+        // Fix: short caption on the image, full listing as its own text msg.
+        const shortCaption = `\`\`\`┌────═━┈ ${botDisplayName} ┈━═────┐
+ ✇ ▸ Owner: ${ownerName}
+ ✇ ▸ User: ${pushName}
+ ✇ ▸ Categories: ${totalCategories}
+ ✇ ▸ Commands: ${totalCommands}
+ ✇ ▸ Uptime: ${up}
+└──────═━┈┈━═──────┘\`\`\`
+👇 Full command list below`;
         const fullText = header + body + footer;
 
         const imageUrl = (() => {
@@ -1619,40 +1629,26 @@ Prefix works with every command below — e.g. .aisearch
 
         if (menuImageBuffer) {
             try {
-                const res = await nexus.sendMessage(chatId, { image: menuImageBuffer, caption: fullText });
-                console.log(chalk.cyan(`📤 [SEND RESULT] chat=${chatId} id=${res?.key?.id || 'NO_ID_RETURNED'}`));
+                await nexus.sendMessage(chatId, { image: menuImageBuffer, caption: shortCaption });
             } catch (e) {
-                console.log(chalk.yellow(`⚠️ Full menu image (local buffer) failed, falling back to text: ${e.message}`));
-                try {
-                    const res = await nexus.sendMessage(chatId, { text: fullText });
-                    console.log(chalk.cyan(`📤 [SEND RESULT] chat=${chatId} id=${res?.key?.id || 'NO_ID_RETURNED'}`));
-                } catch (e2) {
-                    console.log(chalk.red(`❌ [SEND FAILED] chat=${chatId}: ${e2.message}`));
-                }
+                console.log(chalk.yellow(`⚠️ Full menu image (local buffer) failed: ${e.message}`));
             }
         } else if (imageUrl) {
             try {
-                const res = await nexus.sendMessage(chatId, { image: { url: imageUrl }, caption: fullText });
-                console.log(chalk.cyan(`📤 [SEND RESULT] chat=${chatId} id=${res?.key?.id || 'NO_ID_RETURNED'}`));
+                await nexus.sendMessage(chatId, { image: { url: imageUrl }, caption: shortCaption });
             } catch (e) {
-                console.log(chalk.yellow(`⚠️ Full menu image failed, falling back to text: ${e.message}`));
-                try {
-                    const res = await nexus.sendMessage(chatId, { text: fullText });
-                    console.log(chalk.cyan(`📤 [SEND RESULT] chat=${chatId} id=${res?.key?.id || 'NO_ID_RETURNED'}`));
-                } catch (e2) {
-                    console.log(chalk.red(`❌ [SEND FAILED] chat=${chatId}: ${e2.message}`));
-                }
-            }
-        } else {
-            try {
-                const res = await nexus.sendMessage(chatId, { text: fullText });
-                console.log(chalk.cyan(`📤 [SEND RESULT] chat=${chatId} id=${res?.key?.id || 'NO_ID_RETURNED'}`));
-            } catch (e) {
-                console.log(chalk.red(`❌ [SEND FAILED] chat=${chatId}: ${e.message}`));
+                console.log(chalk.yellow(`⚠️ Full menu image failed: ${e.message}`));
             }
         }
 
-        console.log(chalk.green(`✅ Full menu sent (${totalCategories} categories, ${totalCommands} commands, single message)`));
+        try {
+            const res = await nexus.sendMessage(chatId, { text: fullText });
+            console.log(chalk.cyan(`📤 [SEND RESULT] chat=${chatId} id=${res?.key?.id || 'NO_ID_RETURNED'}`));
+        } catch (e2) {
+            console.log(chalk.red(`❌ [SEND FAILED] chat=${chatId}: ${e2.message}`));
+        }
+
+        console.log(chalk.green(`✅ Full menu sent (${totalCategories} categories, ${totalCommands} commands)`));
     } catch (error) {
         console.log(chalk.red(`❌ Full menu error: ${error.message}`));
         await nexus.sendMessage(chatId, { text: `❌ Error loading menu: ${error.message}` });
