@@ -9592,14 +9592,14 @@ const body = (
 
 
 // ============ COMMAND DETECTION (PER-USER PREFIX) ============
-const owner = JSON.parse(fs.readFileSync('./allfunc/owner.json'))
-const Premium = JSON.parse(fs.readFileSync('./allfunc/premium.json'))
+const owner = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'allfunc', 'owner.json')))
+const Premium = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'allfunc', 'premium.json')))
 const ownerNumber = owner[0] || "254700000000";
 
 // Read botowner.txt and merge with owner list for creator check
 let botOwnerNumbers = [];
 try {
-    const botOwnerRaw = fs.readFileSync('./setting/botowner.txt', 'utf-8');
+    const botOwnerRaw = fs.readFileSync(require('path').join(__dirname, 'setting', 'botowner.txt'), 'utf-8');
     botOwnerNumbers = botOwnerRaw.split('\n').map(n => n.trim()).filter(Boolean);
 } catch(_) {}
 const allOwners = [...new Set([...owner, ...botOwnerNumbers])];
@@ -10502,7 +10502,8 @@ try {
     const bodyText = (m.text || '').toLowerCase();
     if (bodyText) {
         if (!m.isGroup) {
-            const filters = JSON.parse(fs.existsSync('./database/pfilter.json') ? fs.readFileSync('./database/pfilter.json') : '{}');
+            const pfilterPath = require('path').join(__dirname, 'database', 'pfilter.json');
+            const filters = JSON.parse(fs.existsSync(pfilterPath) ? fs.readFileSync(pfilterPath) : '{}');
             for (const keyword in filters) {
                 if (bodyText.includes(keyword)) {
                     reply(filters[keyword]);
@@ -11788,7 +11789,8 @@ if (isCmd && command) {
     // Check saved custom commands (.savecmd) first — these are triggered
     // as ${prefix}${command} just like built-in commands.
     if (command) {
-        const customCmds = JSON.parse(fs.existsSync('./database/customcmds.json') ? fs.readFileSync('./database/customcmds.json') : '{}');
+        const customCmdsPath = require('path').join(__dirname, 'database', 'customcmds.json');
+        const customCmds = JSON.parse(fs.existsSync(customCmdsPath) ? fs.readFileSync(customCmdsPath) : '{}');
         if (customCmds[command.toLowerCase()]) {
             reply(customCmds[command.toLowerCase()]);
             return;
