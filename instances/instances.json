@@ -60,6 +60,21 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 1
+    "crashCount": 0
+  },
+  "sess_6c69ae786846637090a6": {
+    "sessionId": "sess_6c69ae786846637090a6",
+    "pid": 239,
+    "status": "running",
+    "deployedAt": "2026-09-16T06:09:19.008Z",
+    "botConfig": {
+      "ownerNumber": "2348063788754",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
   }
 }
