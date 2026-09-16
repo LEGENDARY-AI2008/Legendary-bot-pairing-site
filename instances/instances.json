@@ -161,11 +161,26 @@
   },
   "sess_96cec0aa157ca5603f4d": {
     "sessionId": "sess_96cec0aa157ca5603f4d",
-    "pid": 18996,
-    "status": "stopped",
-    "deployedAt": "2026-09-16T18:00:18.998Z",
+    "pid": 19584,
+    "status": "running",
+    "deployedAt": "2026-09-16T18:05:20.197Z",
     "botConfig": {
       "ownerNumber": "2347037356401",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
+  },
+  "sess_69305c2fe636cc96c0aa": {
+    "sessionId": "sess_69305c2fe636cc96c0aa",
+    "pid": 19572,
+    "status": "stopped",
+    "deployedAt": "2026-09-16T18:05:16.196Z",
+    "botConfig": {
+      "ownerNumber": "2349128739057",
       "ownerName": "WhatsApp User",
       "botName": "LËGĒNDÃRY BØT",
       "prefix": ".",
@@ -175,21 +190,6 @@
     "crashCount": 1,
     "exitCode": 1
   },
-  "sess_69305c2fe636cc96c0aa": {
-    "sessionId": "sess_69305c2fe636cc96c0aa",
-    "pid": 19008,
-    "status": "running",
-    "deployedAt": "2026-09-16T18:00:23.004Z",
-    "botConfig": {
-      "ownerNumber": "2349128739057",
-      "ownerName": "WhatsApp User",
-      "botName": "LËGĒNDÃRY BØT",
-      "prefix": ".",
-      "workType": "private"
-    },
-    "intentionalStop": false,
-    "crashCount": 1
-  },
   "sess_4bf93b0f7a85031f3905": {
     "sessionId": "sess_4bf93b0f7a85031f3905",
     "pid": 7092,
@@ -197,6 +197,21 @@
     "deployedAt": "2026-09-16T16:29:26.296Z",
     "botConfig": {
       "ownerNumber": "2349012212892",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
+  },
+  "sess_6131b38680baf19b5276": {
+    "sessionId": "sess_6131b38680baf19b5276",
+    "pid": 19484,
+    "status": "running",
+    "deployedAt": "2026-09-16T18:04:09.798Z",
+    "botConfig": {
+      "ownerNumber": "233599040402",
       "ownerName": "WhatsApp User",
       "botName": "LËGĒNDÃRY BØT",
       "prefix": ".",
