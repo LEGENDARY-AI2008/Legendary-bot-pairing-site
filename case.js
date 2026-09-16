@@ -4,7 +4,7 @@
 // confirmed it already holds SESSION_ID/OWNER_NAME/BOT_NAME/etc). Loads
 // it into process.env before anything below reads from it. Wrapped in
 // try/catch so a missing dotenv package doesn't crash the whole bot.
-try { require('dotenv').config({ path: require('path').join(__dirname, 'config.env') }); } catch (_) {}
+try { require('dotenv').config({ path: require('path').join(process.cwd(), 'config.env') }); } catch (_) {}
 
 require('./setting/config')
 const { 
@@ -825,7 +825,7 @@ async function sendMainMenuButtonsTest2(nexus, chatId) {
 // though the send call reports success. Plain text always delivers, so we
 // track "what was last shown to this chat" and let a bare reply like "1"
 // or "next" behave like a tap.
-const STATE_FILE = path.join(__dirname, '..', 'database', 'menu_state.json');
+const STATE_FILE = path.join(process.cwd(), 'database', 'menu_state.json');
 const STATE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 function loadState() {
@@ -1804,8 +1804,8 @@ const __cmd_legendary_economy = (function() {
     const fs = require('fs');
     const path = require('path');
 
-    const ECON_FILE = path.join(__dirname, '..', 'database', 'legendary_economy.json');
-    const ACTIVE_FILE = path.join(__dirname, '..', 'database', 'legendary_economy_active.json');
+    const ECON_FILE = path.join(process.cwd(), 'database', 'legendary_economy.json');
+    const ACTIVE_FILE = path.join(process.cwd(), 'database', 'legendary_economy_active.json');
 
     const STARTING_WALLET = 500;
     const BASE_BANK_CAPACITY = 5000;
@@ -2373,7 +2373,7 @@ const __cmd_economy = (function() {
 const fs = require('fs');
 const path = require('path');
 
-const ECO_FILE = path.join(__dirname, '..', 'database', 'economy.json');
+const ECO_FILE = path.join(process.cwd(), 'database', 'economy.json');
 const STARTING_BALANCE = 1000;
 const DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
 const MYSTERY_BOX_COST = 200;
@@ -4939,8 +4939,8 @@ const path = require('path');
 const economy = __cmd_economy; // shared wallet — always credit coins through economy.awardCoins()
 
 // ============ SESSION STORAGE (one active game per chat) ============
-const SESSION_FILE = path.join(__dirname, '..', 'database', 'games_session.json');
-const STATS_FILE = path.join(__dirname, '..', 'database', 'games_stats.json');
+const SESSION_FILE = path.join(process.cwd(), 'database', 'games_session.json');
+const STATS_FILE = path.join(process.cwd(), 'database', 'games_stats.json');
 const SESSION_TTL_MS = 15 * 60 * 1000; // 15 minutes idle -> auto expire
 
 // loadJSON/saveJSON — local to this IIFE. IMPORTANT: this file is built
@@ -7914,7 +7914,7 @@ const __cmd_settings = (function() {
 const fs = require('fs');
 const path = require('path');
 
-const SETTINGS_FILE = path.join(__dirname, '..', 'database', 'settings.json');
+const SETTINGS_FILE = path.join(process.cwd(), 'database', 'settings.json');
 
 function loadSettings() {
     try {
@@ -8018,7 +8018,7 @@ const dailyGoals = async (nexus, chatId, goal) => {
 
 const rewardsStatus = async (nexus, chatId) => {
     try {
-        const ecoFile = path.join(__dirname, '..', 'database', 'economy.json');
+        const ecoFile = path.join(process.cwd(), 'database', 'economy.json');
         const eco = fs.existsSync(ecoFile) ? JSON.parse(fs.readFileSync(ecoFile)) : {};
         const balance = eco[chatId]?.balance ?? 0;
         await send(nexus, chatId, `🎁 REWARDS STATUS\n\n💰 Balance: ${balance.toLocaleString()} coins\n\nSee the Economy & Rewards menu for the full breakdown.`, 'Rewards Status');
@@ -8077,7 +8077,7 @@ const sessionControl = (nexus, chatId) => send(nexus, chatId,
 
 const dataExport = async (nexus, chatId) => {
     try {
-        const ecoFile = path.join(__dirname, '..', 'database', 'economy.json');
+        const ecoFile = path.join(process.cwd(), 'database', 'economy.json');
         const eco = fs.existsSync(ecoFile) ? JSON.parse(fs.readFileSync(ecoFile)) : {};
         const state = loadSettings();
         const mySettings = state[chatId] || {};

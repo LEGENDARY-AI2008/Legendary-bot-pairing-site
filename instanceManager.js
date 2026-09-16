@@ -5,9 +5,8 @@ const { spawn } = require('child_process');
 const DB_FILE = path.join(__dirname, 'instances', 'instances.json');
 const INSTANCES_DIR = path.join(__dirname, 'instances');
 
-// ⚠️ Safety cap — raise this only once you've confirmed your server can handle more.
-// Each running bot is a live process holding an open WhatsApp connection.
-const MAX_CONCURRENT_INSTANCES = 99;
+// No cap — unlimited concurrent instances.
+const MAX_CONCURRENT_INSTANCES = Infinity;
 
 function ensureDB() {
     if (!fs.existsSync(INSTANCES_DIR)) fs.mkdirSync(INSTANCES_DIR, { recursive: true });
@@ -66,33 +65,16 @@ function deployInstance({ sessionId, botConfig }) {
     ];
     fs.writeFileSync(path.join(instanceDir, 'config.env'), envLines.join('\n'));
 
-    // Copy the entire core bot codebase (everything case.js depends on)
-    // into this instance's folder — excludes node_modules (resolved via
-    // the parent directory automatically) and other instances/sessions data.
-    const EXCLUDE_DIRS = new Set(['node_modules', 'instances', 'sessions', 'plugins', 'suggestions', '.git', 'session']);
-
-    function copyRecursive(src, dest) {
-        const stat = fs.statSync(src);
-        if (stat.isDirectory()) {
-            const dirName = path.basename(src);
-            if (EXCLUDE_DIRS.has(dirName)) return;
-            if (!fs.existsSync(dest)) fs.mkdirSync(dest, { recursive: true });
-            for (const entry of fs.readdirSync(src)) {
-                copyRecursive(path.join(src, entry), path.join(dest, entry));
-            }
-        } else {
-            fs.copyFileSync(src, dest);
-        }
-    }
-
-    for (const entry of fs.readdirSync(__dirname)) {
-        if (EXCLUDE_DIRS.has(entry)) continue;
-        if (entry === '.env') continue; // never copy the main .env (has secrets) into instance folders
-        copyRecursive(path.join(__dirname, entry), path.join(instanceDir, entry));
-    }
-
-    // Spawn the bot as its own isolated process
-    const child = spawn('node', ['bot.js'], {
+    // NOTE: used to copy the entire codebase (cases/, allfunc/, media/,
+    // setting/, node_modules resolution, etc.) into every instance's own
+    // folder — that's what was filling up disk (N instances = N full
+    // copies of the same code). Every instance now runs the ONE shared
+    // bot.js/case.js straight from this project root, with `cwd` pointed
+    // at its own instanceDir below. bot.js, case.js, and Settings.js all
+    // resolve their per-user data (session/, config.env, database/) via
+    // process.cwd() rather than __dirname, so this still isolates each
+    // instance's creds/settings/economy/etc — only the CODE is now shared.
+    const child = spawn('node', [path.join(__dirname, 'bot.js')], {
         cwd: instanceDir,
         stdio: ['ignore', 'pipe', 'pipe'],
         detached: false
@@ -210,9 +192,8 @@ function deployInstanceFromPairing({ instanceId, authDir, botConfig }) {
         fs.copyFileSync(path.join(authDir, file), path.join(instanceSessionDir, file));
     }
 
-    // deployInstance's own codebase copy step excludes the "session"
-    // directory by name, so it won't touch/overwrite what was just placed
-    // here — it copies everything else, then spawns normally.
+    // deployInstance no longer copies anything into instanceDir besides
+    // config.env, so the session/ folder placed above is left untouched.
     return deployInstance({ sessionId: instanceId, botConfig });
 }
 
@@ -260,6 +241,124 @@ function restoreInstances() {
 }
 
 /**
+ * Fully removes an instance — kills the process if still running, deletes
+ * its DB record, and (crucially) deletes its on-disk folder, including the
+ * full duplicated codebase copy and its own session/ auth files. Call this
+ * when a WhatsApp session logs out / disconnects permanently — e.g. from
+ * bot.js's connection.update handler on DisconnectReason.loggedOut — NOT
+ * on a normal reconnect-able drop, since those should keep their session
+ * and just reconnect.
+ */
+function removeInstance(sessionId) {
+    const db = loadDB();
+    if (!db[sessionId]) {
+        return { success: false, message: 'No such instance.' };
+    }
+
+    const child = runningProcesses.get(sessionId);
+    if (child) {
+        child.kill();
+        runningProcesses.delete(sessionId);
+    }
+
+    delete db[sessionId];
+    saveDB(db);
+
+    const instanceDir = path.join(INSTANCES_DIR, sessionId);
+    try {
+        if (fs.existsSync(instanceDir)) {
+            fs.rmSync(instanceDir, { recursive: true, force: true });
+            console.log(`🗑️  removeInstance: deleted ${sessionId} (logged out) — folder + DB record removed.`);
+        }
+    } catch (e) {
+        console.log(`⚠️  removeInstance: couldn't delete folder for ${sessionId}: ${e.message}`);
+    }
+
+    return { success: true, message: 'Instance removed.' };
+}
+
+/**
+ * Sweeps instances/ for folders that have no matching DB entry (orphans
+ * left behind by crashes, manual edits, or older code before removeInstance
+ * existed) and deletes them. Safe to call on boot alongside restoreInstances().
+ */
+function cleanupOrphanedInstances() {
+    const db = loadDB();
+    if (!fs.existsSync(INSTANCES_DIR)) return;
+
+    let removed = 0;
+    for (const entry of fs.readdirSync(INSTANCES_DIR)) {
+        const entryPath = path.join(INSTANCES_DIR, entry);
+        if (entry === 'instances.json') continue;
+        if (!fs.statSync(entryPath).isDirectory()) continue;
+        if (db[entry]) continue; // still a tracked instance — leave it
+
+        try {
+            fs.rmSync(entryPath, { recursive: true, force: true });
+            removed++;
+        } catch (e) {
+            console.log(`⚠️  cleanupOrphanedInstances: couldn't delete ${entry}: ${e.message}`);
+        }
+    }
+    if (removed) console.log(`🗑️  cleanupOrphanedInstances: removed ${removed} orphaned instance folder(s).`);
+}
+
+/**
+ * Restarts a single running instance in place, redeploying it with its
+ * existing botConfig so it picks up any code changes on disk (e.g. after
+ * `.update` rewrote the shared bot.js/case.js). Marks it as an intentional
+ * stop first so the crash-auto-respawn logic in deployInstance's exit
+ * handler doesn't treat this as a crash — that path increments a crash
+ * counter capped at 5, and repeated `.update`-triggered restarts would
+ * otherwise burn through that cap for reasons that have nothing to do with
+ * the instance actually being unstable. We redeploy explicitly instead.
+ */
+function restartInstance(sessionId) {
+    const db = loadDB();
+    const instance = db[sessionId];
+    if (!instance || instance.status !== 'running') {
+        return { success: false, message: 'No running instance found for this session.' };
+    }
+
+    db[sessionId].intentionalStop = true;
+    saveDB(db);
+
+    const child = runningProcesses.get(sessionId);
+    if (child) child.kill();
+    runningProcesses.delete(sessionId);
+
+    setTimeout(() => {
+        deployInstance({ sessionId, botConfig: instance.botConfig });
+    }, 1000);
+
+    return { success: true, message: 'Restarting...' };
+}
+
+/**
+ * Restarts every currently-running instance, staggered 3s apart so the
+ * server isn't killing + respawning all of them in the same instant.
+ * Call this after `.update` rewrites the shared code — already-running
+ * instances still have the OLD code loaded in memory and won't pick up
+ * the change until they restart some other way otherwise.
+ */
+function restartAllInstances() {
+    const db = loadDB();
+    const running = Object.values(db).filter(i => i.status === 'running');
+
+    if (!running.length) {
+        console.log('♻️  restartAllInstances: no running instances to restart.');
+        return { success: true, restarted: 0 };
+    }
+
+    console.log(`♻️  restartAllInstances: restarting ${running.length} instance(s) to pick up updated code...`);
+    running.forEach((instance, index) => {
+        setTimeout(() => restartInstance(instance.sessionId), index * 3000);
+    });
+
+    return { success: true, restarted: running.length };
+}
+
+/**
  * Stops a running instance for the given session.
  */
 function stopInstance(sessionId) {
@@ -296,6 +395,10 @@ module.exports = {
     deployInstanceFromPairing,
     restoreInstances,
     stopInstance,
+    removeInstance,
+    restartInstance,
+    restartAllInstances,
+    cleanupOrphanedInstances,
     getInstance,
     getInstanceLogs,
     countRunning,

@@ -65,7 +65,12 @@ if (problems.length) {
 }
 
 const API_BASE_URL = process.env.API_BASE_URL || 'https://legendarybot.dpdns.org';
-const SESSION_DIR = path.join(__dirname, 'session');
+// process.cwd(), not __dirname: bot.js now runs from ONE shared codebase
+// location for every instance, spawned with cwd set to that instance's own
+// folder (see instanceManager.js). __dirname would point at the shared
+// code and make every instance share one session — process.cwd() keeps
+// each instance's WhatsApp creds isolated in its own folder.
+const SESSION_DIR = path.join(process.cwd(), 'session');
 const store = makeInMemoryStore ? makeInMemoryStore({ logger: pino().child({ level: 'silent', stream: 'store' }) }) : null;
 
 async function fetchAndBuildSession() {
@@ -97,8 +102,17 @@ async function fetchAndBuildSession() {
 }
 
 async function sendWelcomeMessage(sock) {
-    if (sock.welcomeSent) return;
-    sock.welcomeSent = true;
+    // Was tracked as sock.welcomeSent — an in-memory flag on the socket
+    // object. Baileys reconnects (normal, frequent, not a real restart)
+    // create a brand new socket, so that flag reset every time and the
+    // welcome DM fired again on every reconnect — looking like a fresh
+    // pairing each time. Persisting a marker file per-instance (isolated
+    // via cwd, same as session/ and database/) survives reconnects AND
+    // full process restarts, so it only ever sends once per real pairing.
+    const WELCOME_MARKER = path.join(process.cwd(), '.welcomed');
+    if (fs.existsSync(WELCOME_MARKER)) return;
+    if (sock._welcomeInFlight) return; // guard against two 'open' events firing close together
+    sock._welcomeInFlight = true;
 
     const ownerJid = config.ownerNumber.replace(/[^0-9]/g, '') + '@s.whatsapp.net';
     const caption =
@@ -124,6 +138,11 @@ _Powered by LËGĒNDÃRY LAB™ Studio_`;
         // Fall back to text-only if the image can't be fetched, so the welcome still lands
         await sock.sendMessage(ownerJid, { text: caption });
     }
+
+    // Only mark as sent once it actually landed — a failed send above would
+    // have thrown before reaching here, so a genuine failure still retries
+    // on the next connection rather than silently marking itself done.
+    try { fs.writeFileSync(WELCOME_MARKER, new Date().toISOString()); } catch (_) {}
 }
 
 async function startBot() {
