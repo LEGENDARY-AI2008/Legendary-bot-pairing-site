@@ -2,7 +2,7 @@
   "pair-0db47e2b31f0": {
     "sessionId": "pair-0db47e2b31f0",
     "pid": 172,
-    "status": "running",
+    "status": "stopped",
     "deployedAt": "2026-09-17T21:59:38.744Z",
     "botConfig": {
       "ownerNumber": "2348137419241",
@@ -12,7 +12,8 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 10
+    "crashCount": 11,
+    "exitCode": 1
   },
   "pair-52c571c56d83": {
     "sessionId": "pair-52c571c56d83",
