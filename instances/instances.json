@@ -239,5 +239,20 @@
     },
     "intentionalStop": false,
     "crashCount": 0
+  },
+  "pair-a9d9c6f98bee": {
+    "sessionId": "pair-a9d9c6f98bee",
+    "pid": 97,
+    "status": "running",
+    "deployedAt": "2026-09-17T13:52:59.876Z",
+    "botConfig": {
+      "ownerNumber": "2349012463035",
+      "ownerName": "Martinez",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
   }
 }
