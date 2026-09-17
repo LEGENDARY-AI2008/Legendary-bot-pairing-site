@@ -615,7 +615,14 @@ const githubSync = require('./githubSync');
     // right before the process exits (Render sends SIGTERM before
     // stopping/redeploying), so the backup never lags behind by more
     // than a few minutes even during a routine restart.
-    githubSync.startAutoSync();
+    // Excludes instances/instances.json deliberately — Render never
+    // actually runs bots anymore (see deployInstanceFromPairing spawn:false
+    // above), so its own view of "running" status is always wrong. Pushing
+    // it periodically would overwrite Pterodactyl's real status with stale
+    // data — see pushInstanceEntry() in githubSync.js for the full story.
+    // New pairings still reach GitHub immediately via pushInstanceEntry(),
+    // just not through this periodic bulk sync.
+    githubSync.startAutoSync(5 * 60 * 1000, githubSync.SYNC_FILES.filter(f => f !== 'instances/instances.json'));
     if (githubSync.enabled()) {
         console.log('✅ githubSync: auto backup/restore active');
     }

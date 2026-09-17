@@ -8,14 +8,13 @@
 // growing and a paid persistent disk costs extra, we treat GitHub
 // as the durable copy of the *data*, restored on every boot.
 //
-// WHAT NEVER GOES HERE: WhatsApp session/auth folders (creds.json
-// etc). Those are full account access to a real person's WhatsApp —
-// pushing them to a repo, private or not, means anyone with repo
-// access could hijack any paired user's account. If Render restarts
-// unexpectedly, paired sessions are lost and users re-pair; that's
-// the accepted tradeoff of skipping persistent paid storage. Do not
-// add session directories to SYNC_FILES below to "fix" that — it
-// trades a real inconvenience for a real security hole.
+// SESSIONS: WhatsApp session/auth files (creds.json etc.) are now
+// ALSO pushed to GitHub, as sessions/<sessionId>.json — one file per
+// paired user, per an explicit decision to accept the tradeoff.
+// SECURITY NOTE (read this before touching the repo's access list):
+// that file IS full account access to whoever paired — anyone with
+// read access to GITHUB_REPO can hijack that WhatsApp account. Keep
+// the repo private and GITHUB_TOKEN scoped to only this repo.
 //
 // Needs two env vars set in Render's dashboard (not committed):
 //   GITHUB_TOKEN  - a fine-grained PAT with "Contents: read and write"
@@ -120,9 +119,9 @@ function hash(buf) {
     return h;
 }
 
-async function backupToGitHub() {
+async function backupToGitHub(files = SYNC_FILES) {
     if (!enabled()) return;
-    for (const repoPath of SYNC_FILES) {
+    for (const repoPath of files) {
         const localPath = path.join(__dirname, repoPath);
         if (!fs.existsSync(localPath)) continue;
 
@@ -142,25 +141,98 @@ async function backupToGitHub() {
 }
 
 /**
+ * Merge just ONE sessionId's entry into instances.json on GitHub,
+ * without touching any other entry. Used by Render when it registers
+ * a new pairing (spawn:false) — Render's own local view of "status"
+ * is meaningless (it never actually runs bots anymore), so it must
+ * NEVER push its whole local instances.json over GitHub's copy, only
+ * ever add/update its own single new key. The authoritative status
+ * for every entry (running/pid/crashCount) belongs to whichever host
+ * actually spawned it — currently multibot.js on Pterodactyl, via its
+ * own full-file backupToGitHub() in SYNC_FILES.
+ *
+ * Skipping this and instead relying on a full-file sync from two
+ * different hosts is exactly what caused bots to silently double-spawn
+ * after a few hours (each host's periodic push clobbering the other's
+ * status), so don't change this back to a bulk push.
+ */
+async function pushInstanceEntry(sessionId, entry) {
+    if (!enabled()) return;
+    const repoPath = 'instances/instances.json';
+    try {
+        const remote = await getRemoteFile(repoPath);
+        const current = remote?.content ? JSON.parse(Buffer.from(remote.content, 'base64').toString('utf-8')) : {};
+        current[sessionId] = entry;
+        await putRemoteFile(repoPath, JSON.stringify(current, null, 2), remote?.sha);
+        console.log(`✅ githubSync: registered ${sessionId} in instances.json on GitHub`);
+    } catch (e) {
+        console.log(`⚠️  githubSync: couldn't register ${sessionId}: ${e.message}`);
+    }
+}
+
+/**
  * Starts the periodic backup loop. Call once at boot, after
  * restoreFromGitHub(). Also backs up immediately on SIGTERM (Render
  * sends this before stopping/redeploying an instance) so the most
  * recent state is saved on the way out, not just every N minutes.
+ *
+ * files: which of SYNC_FILES to actually push periodically. Defaults
+ * to all of them — but Render must pass a list that EXCLUDES
+ * 'instances/instances.json' (see pushInstanceEntry above for why).
+ * multibot.js, the one host that actually knows real running status,
+ * keeps using the full default list.
  */
-function startAutoSync(intervalMs = 5 * 60 * 1000) {
+function startAutoSync(intervalMs = 5 * 60 * 1000, files = SYNC_FILES) {
     if (!enabled()) return;
-    setInterval(() => { backupToGitHub().catch(() => {}); }, intervalMs);
+    setInterval(() => { backupToGitHub(files).catch(() => {}); }, intervalMs);
 
     let shuttingDown = false;
     const flushAndExit = async (signal) => {
         if (shuttingDown) return;
         shuttingDown = true;
         console.log(`🛑 githubSync: ${signal} received — flushing final backup before exit...`);
-        try { await backupToGitHub(); } catch {}
+        try { await backupToGitHub(files); } catch {}
         process.exit(0);
     };
     process.on('SIGTERM', () => flushAndExit('SIGTERM'));
     process.on('SIGINT', () => flushAndExit('SIGINT'));
 }
 
-module.exports = { restoreFromGitHub, backupToGitHub, startAutoSync, SYNC_FILES, enabled };
+/**
+ * Push one paired user's session files (auth-state JSON files, as
+ * produced by useMultiFileAuthState) to GitHub as a single bundled
+ * file: sessions/<sessionId>.json — { filename: base64content, ... }.
+ * Fire-and-forget from the caller's point of view; failures are
+ * logged, never thrown into the pairing flow.
+ */
+async function pushSessionFiles(sessionId, filesBundle) {
+    if (!enabled()) {
+        console.log(`ℹ️  githubSync: GITHUB_TOKEN/GITHUB_REPO not set — session ${sessionId} was NOT backed up to GitHub.`);
+        return;
+    }
+    const repoPath = `sessions/${sessionId}.json`;
+    try {
+        const remote = await getRemoteFile(repoPath);
+        await putRemoteFile(repoPath, JSON.stringify(filesBundle), remote?.sha);
+        console.log(`✅ githubSync: session ${sessionId} backed up to GitHub`);
+    } catch (e) {
+        console.log(`⚠️  githubSync: couldn't back up session ${sessionId}: ${e.message}`);
+    }
+}
+
+/**
+ * Fetch one session's bundle back down from GitHub. Returns the
+ * { filename: base64content, ... } bundle, or null if no backup
+ * exists yet for that sessionId. Throws on a real network/API error
+ * so the caller (bot.js) can tell "not found" apart from "GitHub is
+ * unreachable" and report the right thing.
+ */
+async function fetchSessionFiles(sessionId) {
+    if (!enabled()) return null;
+    const repoPath = `sessions/${sessionId}.json`;
+    const remote = await getRemoteFile(repoPath);
+    if (!remote || !remote.content) return null;
+    return JSON.parse(Buffer.from(remote.content, 'base64').toString('utf-8'));
+}
+
+module.exports = { restoreFromGitHub, backupToGitHub, startAutoSync, SYNC_FILES, enabled, pushSessionFiles, fetchSessionFiles, pushInstanceEntry };

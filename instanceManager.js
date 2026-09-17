@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const githubSync = require('./githubSync');
 
 const DB_FILE = path.join(__dirname, 'instances', 'instances.json');
 const INSTANCES_DIR = path.join(__dirname, 'instances');
@@ -39,7 +40,7 @@ function getInstance(sessionId) {
  * @param {object} opts { sessionId, botConfig: { ownerNumber, ownerName, botName, prefix, workType } }
  * @returns {object} { success, message }
  */
-function deployInstance({ sessionId, botConfig }) {
+function deployInstance({ sessionId, botConfig, spawn: shouldSpawn = true }) {
     const db = loadDB();
 
     if (db[sessionId] && db[sessionId].status === 'running') {
@@ -60,10 +61,33 @@ function deployInstance({ sessionId, botConfig }) {
         `OWNER_NAME=${botConfig.ownerName}`,
         `BOT_NAME=${botConfig.botName || 'LËGĒNDÃRY BØT'}`,
         `PREFIX=${botConfig.prefix || '.'}`,
-        `WORKTYPE=${botConfig.workType || 'private'}`,
-        `API_BASE_URL=https://legendarybot.dpdns.org`
+        `WORKTYPE=${botConfig.workType || 'private'}`
     ];
     fs.writeFileSync(path.join(instanceDir, 'config.env'), envLines.join('\n'));
+
+    // spawn: false — used by server.js (Render) now that actual bot
+    // processes run on Pterodactyl via multibot.js. Render still needs
+    // this function to register the instance (config.env + a db entry
+    // for multibot.js's GitHub poll to pick up) without ever running the
+    // bot itself — Render running it too is exactly the double-deploy
+    // this flag exists to prevent.
+    if (!shouldSpawn) {
+        const entry = {
+            sessionId,
+            status: 'pending', // NOT 'running' — this host isn't running it; deliberately lets a real host's deployInstance() proceed instead of skipping via the guard above
+            registeredAt: new Date().toISOString(),
+            botConfig,
+            intentionalStop: false,
+            crashCount: db[sessionId]?.crashCount || 0
+        };
+        db[sessionId] = entry;
+        saveDB(db);
+        // Merge just this one entry into GitHub — never a bulk overwrite
+        // of instances.json from this host. See pushInstanceEntry's own
+        // comment in githubSync.js for why that distinction matters.
+        githubSync.pushInstanceEntry(sessionId, entry).catch(() => {});
+        return { success: true, message: 'Instance registered (not spawned on this host).' };
+    }
 
     // NOTE: used to copy the entire codebase (cases/, allfunc/, media/,
     // setting/, node_modules resolution, etc.) into every instance's own
@@ -182,7 +206,7 @@ function deployInstance({ sessionId, botConfig }) {
  *   instanceId: any unique folder-safe string (not a real lookup key)
  *   authDir: local folder containing creds.json etc. from the pairing socket
  */
-function deployInstanceFromPairing({ instanceId, authDir, botConfig }) {
+function deployInstanceFromPairing({ instanceId, authDir, botConfig, spawn: shouldSpawn = true }) {
     const instanceDir = path.join(INSTANCES_DIR, instanceId);
     const instanceSessionDir = path.join(instanceDir, 'session');
 
@@ -194,7 +218,7 @@ function deployInstanceFromPairing({ instanceId, authDir, botConfig }) {
 
     // deployInstance no longer copies anything into instanceDir besides
     // config.env, so the session/ folder placed above is left untouched.
-    return deployInstance({ sessionId: instanceId, botConfig });
+    return deployInstance({ sessionId: instanceId, botConfig, spawn: shouldSpawn });
 }
 
 /**
