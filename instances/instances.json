@@ -46,9 +46,9 @@
   },
   "sess_4de6393a787aff42560d": {
     "sessionId": "sess_4de6393a787aff42560d",
-    "pid": 747,
+    "pid": 783,
     "status": "stopped",
-    "deployedAt": "2026-09-17T23:43:32.549Z",
+    "deployedAt": "2026-09-17T23:45:32.593Z",
     "botConfig": {
       "ownerNumber": "2348137419241",
       "ownerName": "WhatsApp User",
@@ -58,38 +58,6 @@
     },
     "intentionalStop": false,
     "crashCount": 15,
-    "exitCode": 1
-  },
-  "sess_713b23fb76ec91517bc5": {
-    "sessionId": "sess_713b23fb76ec91517bc5",
-    "pid": 748,
-    "status": "stopped",
-    "deployedAt": "2026-09-17T23:43:32.577Z",
-    "botConfig": {
-      "ownerNumber": "2349012212892",
-      "ownerName": "WhatsApp User",
-      "botName": "LËGĒNDÃRY BØT",
-      "prefix": ".",
-      "workType": "private"
-    },
-    "intentionalStop": false,
-    "crashCount": 13,
-    "exitCode": 1
-  },
-  "sess_b08a98af57c14838360e": {
-    "sessionId": "sess_b08a98af57c14838360e",
-    "pid": 749,
-    "status": "stopped",
-    "deployedAt": "2026-09-17T23:43:32.594Z",
-    "botConfig": {
-      "ownerNumber": "2349012212892",
-      "ownerName": "WhatsApp User",
-      "botName": "LËGĒNDÃRY BØT",
-      "prefix": ".",
-      "workType": "private"
-    },
-    "intentionalStop": false,
-    "crashCount": 12,
     "exitCode": 1
   }
 }
