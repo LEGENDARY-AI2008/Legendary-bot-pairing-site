@@ -211,9 +211,9 @@
   },
   "sess_cc2755ec17e308a4127f": {
     "sessionId": "sess_cc2755ec17e308a4127f",
-    "pid": 254,
+    "pid": 262,
     "status": "stopped",
-    "deployedAt": "2026-09-17T13:58:18.451Z",
+    "deployedAt": "2026-09-17T14:00:19.147Z",
     "botConfig": {
       "ownerNumber": "233599040402",
       "ownerName": "WhatsApp User",
@@ -242,9 +242,9 @@
   },
   "pair-a9d9c6f98bee": {
     "sessionId": "pair-a9d9c6f98bee",
-    "pid": 97,
+    "pid": 109,
     "status": "running",
-    "deployedAt": "2026-09-17T13:52:59.876Z",
+    "deployedAt": "2026-09-17T13:56:22.079Z",
     "botConfig": {
       "ownerNumber": "2349012463035",
       "ownerName": "Martinez",
