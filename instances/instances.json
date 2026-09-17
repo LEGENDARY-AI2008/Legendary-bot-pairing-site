@@ -208,5 +208,21 @@
     },
     "intentionalStop": false,
     "crashCount": 6
+  },
+  "sess_cc2755ec17e308a4127f": {
+    "sessionId": "sess_cc2755ec17e308a4127f",
+    "pid": 178,
+    "status": "stopped",
+    "deployedAt": "2026-09-17T13:19:47.147Z",
+    "botConfig": {
+      "ownerNumber": "233599040402",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 2,
+    "exitCode": 0
   }
 }
