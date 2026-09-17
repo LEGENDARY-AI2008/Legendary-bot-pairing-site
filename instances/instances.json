@@ -1,9 +1,9 @@
 {
   "pair-0db47e2b31f0": {
     "sessionId": "pair-0db47e2b31f0",
-    "pid": 398,
+    "pid": 40,
     "status": "stopped",
-    "deployedAt": "2026-09-17T21:47:46.016Z",
+    "deployedAt": "2026-09-17T21:53:38.954Z",
     "botConfig": {
       "ownerNumber": "2348137419241",
       "ownerName": "I AM THE REAL LEGEND 💀💀💀",
@@ -12,13 +12,14 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 9,
+    "crashCount": 10,
     "exitCode": 1
   },
   "pair-52c571c56d83": {
     "sessionId": "pair-52c571c56d83",
-    "status": "pending",
-    "registeredAt": "2026-09-17T21:53:08.159Z",
+    "pid": 46,
+    "status": "running",
+    "deployedAt": "2026-09-17T21:53:38.969Z",
     "botConfig": {
       "ownerNumber": "2348137419241",
       "ownerName": "I AM THE REAL LEGEND 💀💀💀",
