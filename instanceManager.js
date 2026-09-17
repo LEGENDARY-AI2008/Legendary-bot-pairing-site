@@ -198,10 +198,16 @@ function deployInstance({ sessionId, botConfig, spawn: shouldSpawn = true }) {
 
 /**
  * Deploys straight from a freshly-paired WhatsApp connection's local auth
- * files — no session ID lookup, no remote fetch, no separate step for the
- * user. Copies the real creds into the new instance's session folder
- * BEFORE deployInstance runs, so bot.js (fixed to check for local creds
- * first) skips the remote-fetch path entirely and just starts working.
+ * files — no session ID lookup, no separate step for the user. Copies the
+ * real creds into the new instance's session folder, AND pushes the same
+ * bundle to GitHub as sessions/<instanceId>.json — the actual bot process
+ * usually runs on a different host now (multibot.js on Pterodactyl), which
+ * only ever fetches sessions from GitHub, never from this host's local
+ * disk. Skipping this push is exactly what left Telegram-paired bots
+ * stuck respawning with "No session found on GitHub" — the website's own
+ * pairing flow separately called sessionManager.createSession() to do
+ * this, but nothing else that calls this function did, so it's done here
+ * now instead, once, for every caller.
  * @param {object} opts { instanceId, authDir, botConfig }
  *   instanceId: any unique folder-safe string (not a real lookup key)
  *   authDir: local folder containing creds.json etc. from the pairing socket
@@ -212,9 +218,14 @@ function deployInstanceFromPairing({ instanceId, authDir, botConfig, spawn: shou
 
     if (!fs.existsSync(instanceSessionDir)) fs.mkdirSync(instanceSessionDir, { recursive: true });
 
+    const bundle = {};
     for (const file of fs.readdirSync(authDir)) {
-        fs.copyFileSync(path.join(authDir, file), path.join(instanceSessionDir, file));
+        const srcPath = path.join(authDir, file);
+        if (!fs.statSync(srcPath).isFile()) continue;
+        fs.copyFileSync(srcPath, path.join(instanceSessionDir, file));
+        bundle[file] = fs.readFileSync(srcPath).toString('base64');
     }
+    githubSync.pushSessionFiles(instanceId, bundle).catch(() => {});
 
     // deployInstance no longer copies anything into instanceDir besides
     // config.env, so the session/ folder placed above is left untouched.
