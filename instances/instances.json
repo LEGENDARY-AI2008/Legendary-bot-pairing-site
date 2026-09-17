@@ -211,9 +211,9 @@
   },
   "sess_cc2755ec17e308a4127f": {
     "sessionId": "sess_cc2755ec17e308a4127f",
-    "pid": 582,
+    "pid": 590,
     "status": "stopped",
-    "deployedAt": "2026-09-17T17:20:27.465Z",
+    "deployedAt": "2026-09-17T17:22:31.776Z",
     "botConfig": {
       "ownerNumber": "233599040402",
       "ownerName": "WhatsApp User",
