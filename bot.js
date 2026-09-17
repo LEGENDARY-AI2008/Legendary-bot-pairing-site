@@ -23,6 +23,7 @@ const { Boom } = require('@hapi/boom');
 const chalk = require('chalk');
 const pino = require('pino');
 const { smsg } = require('./storage');
+const githubSync = require('./githubSync');
 
 const config = {
     sessionId: process.env.SESSION_ID,
@@ -64,7 +65,7 @@ if (problems.length) {
     process.exit(1);
 }
 
-const API_BASE_URL = process.env.API_BASE_URL || 'https://legendarybot.dpdns.org';
+const API_BASE_URL = process.env.API_BASE_URL || 'https://legendarybot.dpdns.org'; // only used for the optional welcome image now — falls back to text if unreachable
 // process.cwd(), not __dirname: bot.js now runs from ONE shared codebase
 // location for every instance, spawned with cwd set to that instance's own
 // folder (see instanceManager.js). __dirname would point at the shared
@@ -84,21 +85,31 @@ async function fetchAndBuildSession() {
         return;
     }
 
-    console.log(chalk.yellow('🔄 Fetching your session...'));
-    let response;
-    try {
-        response = await axios.get(`${API_BASE_URL}/api/session/${config.sessionId}`);
-    } catch (e) {
-        console.log(chalk.red(`❌ Could not fetch session: ${e.response?.data?.error || e.message}`));
+    console.log(chalk.yellow('🔄 Fetching your session from GitHub...'));
+
+    if (!githubSync.enabled()) {
+        console.log(chalk.red('❌ Could not fetch session: GITHUB_TOKEN/GITHUB_REPO are not set on this instance.'));
         process.exit(1);
     }
 
-    const { files } = response.data;
-    if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
-    for (const [filename, content] of Object.entries(files)) {
-        fs.writeFileSync(path.join(SESSION_DIR, filename), content, 'utf-8');
+    let bundle;
+    try {
+        bundle = await githubSync.fetchSessionFiles(config.sessionId);
+    } catch (e) {
+        console.log(chalk.red(`❌ Could not fetch session from GitHub: ${e.message}`));
+        process.exit(1);
     }
-    console.log(chalk.green('✅ Session restored locally.'));
+
+    if (!bundle) {
+        console.log(chalk.red(`❌ No session found on GitHub for ID ${config.sessionId}. Pair again to generate a new one.`));
+        process.exit(1);
+    }
+
+    if (!fs.existsSync(SESSION_DIR)) fs.mkdirSync(SESSION_DIR, { recursive: true });
+    for (const [filename, content] of Object.entries(bundle)) {
+        fs.writeFileSync(path.join(SESSION_DIR, filename), Buffer.from(content, 'base64'));
+    }
+    console.log(chalk.green('✅ Session restored locally from GitHub.'));
 }
 
 async function sendWelcomeMessage(sock) {
@@ -243,7 +254,32 @@ async function startBot() {
     });
 }
 
+// Safety net for leaked tmp/ files: several commands (stickers, audio
+// converters, AI image tools) only delete their scratch file on the
+// success path — an error midway leaves it behind forever, and nothing
+// else ever swept it. This runs once per instance boot (cwd is this
+// instance's own folder, never shared with anyone else) and clears
+// anything older than 30 minutes, so leaked files can't accumulate
+// past one boot cycle even if a specific command still leaks on error.
+function sweepStaleTmpFiles() {
+    const tmpDir = path.join(process.cwd(), 'tmp');
+    if (!fs.existsSync(tmpDir)) return;
+    const cutoff = Date.now() - 30 * 60 * 1000;
+    let swept = 0;
+    for (const name of fs.readdirSync(tmpDir)) {
+        const filePath = path.join(tmpDir, name);
+        try {
+            if (fs.statSync(filePath).mtimeMs < cutoff) {
+                fs.unlinkSync(filePath);
+                swept++;
+            }
+        } catch (_) {}
+    }
+    if (swept) console.log(chalk.gray(`🧹 Cleared ${swept} leftover tmp file(s) from before this boot.`));
+}
+
 printBanner();
+sweepStaleTmpFiles();
 startBot().catch((e) => {
     console.log(chalk.red(`❌ Failed to start bot: ${e.message}`));
     process.exit(1);

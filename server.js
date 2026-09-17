@@ -144,6 +144,7 @@ app.post('/pair', async (req, res) => {
                                 const result = instanceManager.deployInstanceFromPairing({
                                     instanceId: sessionId,
                                     authDir: sessionPath,
+                                    spawn: false, // Render just registers it — Pterodactyl's multibot.js is what actually runs bots now
                                     botConfig: {
                                         ownerNumber: number,
                                         ownerName: 'WhatsApp User',
@@ -419,6 +420,7 @@ app.post('/api/panel/deploy', express.json(), (req, res) => {
     const result = instanceManager.deployInstanceFromPairing({
         instanceId: sessionId,
         authDir: session.authDir,
+        spawn: false, // Render just registers it — Pterodactyl's multibot.js is what actually runs bots now
         botConfig: {
             ownerNumber: session.phoneNumber,
             ownerName: ownerName || 'Owner',
@@ -600,13 +602,14 @@ const githubSync = require('./githubSync');
     app.listen(PORT, async () => {
     console.log(`✅ LËGĚNDÃRY BØT Pairing Server running on port ${PORT}`);
 
-    // instances.json (who was deployed before this restart) was just pulled
-    // down by restoreFromGitHub() above — but nothing actually respawned
-    // those bots yet, so every paired user's bot would otherwise stay dead
-    // until someone manually redeploys via /api/panel/deploy. This wires
-    // that gap: restoreInstances() resets each stale "running" record and
-    // relaunches it for real, staggered so they don't all spawn at once.
-    instanceManager.restoreInstances();
+    // Used to also call instanceManager.restoreInstances() here to relaunch
+    // every paired user's bot on Render itself after a restart — but actual
+    // bots now run on Pterodactyl via multibot.js, which does its own
+    // restore-and-spawn on ITS boot. Render doing this too is exactly the
+    // double-deploy (same session, two hosts, fighting each other) that
+    // caused the disk problem in the first place. Render's job now is only
+    // to register instances (see deployInstanceFromPairing spawn:false
+    // above) and let multibot.js's GitHub poll pick them up.
 
     // Push local data back to GitHub every 5 minutes, plus once more
     // right before the process exits (Render sends SIGTERM before
