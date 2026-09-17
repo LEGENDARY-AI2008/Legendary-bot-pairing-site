@@ -159,13 +159,13 @@ async function pairAndDeploy(ctx, number, botConfig) {
                     try { nexus.end(undefined); } catch {}
                     await new Promise(r => setTimeout(r, 1000));
 
-                    const result = deployInstanceFromPairing({ instanceId, authDir: sessionPath, botConfig });
+                    const result = deployInstanceFromPairing({ instanceId, authDir: sessionPath, spawn: false, botConfig });
 
                     if (result.success) {
                         pairedUsers.recordPairing(ctx.from.id, { instanceId, number, username: ctx.from.username || ctx.from.first_name });
                         await ctx.replyWithMarkdown(
-                            `✅ *Your bot is live!*\n\n` +
-                            `It's already deployed and running — no setup needed.\n\n` +
+                            `✅ *Pairing successful!*\n\n` +
+                            `Your bot is starting up now on the server — should be live within a minute.\n\n` +
                             forceJoin.supportMessage()
                         );
                         await notifyOwners(
@@ -471,12 +471,11 @@ for (const token of TOKENS) {
     console.log(`🤖 Pairing bot launched (token ending ...${token.slice(-6)})`);
 }
 
-// Autoload sessions — restores every bot instance that was running before
-// this process last restarted (crash, redeploy, panel restart, etc.), so
-// paired users don't silently lose their bot when the Telegram bot itself
-// bounces. Runs once, a few seconds after launch so both bot tokens are
-// fully up first.
-setTimeout(() => restoreInstances(), 5000);
+// Actual bot instances now run on Pterodactyl via multibot.js, not here on
+// Render. The Telegram bot's only job is to register pairings (spawn: false)
+// and let multibot.js's GitHub poll pick them up. So no restoreInstances()
+// call needed — that would spawn bots locally, creating the double-deploy we
+// fixed everywhere else.
 
 process.once('SIGINT', () => process.exit(0));
 process.once('SIGTERM', () => process.exit(0));
