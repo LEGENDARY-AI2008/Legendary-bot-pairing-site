@@ -278,14 +278,24 @@ function createBot(token) {
                 forceJoin.joinMenu()
             );
         }
-        await ctx.replyWithPhoto(
-            { source: path.join(__dirname, 'media', 'menu-banner.jpg') },
-            {
-                caption: `👋 *Welcome to LËGĒNDÃRY BØT pairing!*\n\nTap below to link your WhatsApp number — your bot deploys automatically the moment it connects, no extra steps.`,
-                parse_mode: 'Markdown',
-                ...Markup.inlineKeyboard([[{ text: '🔗 Pair Now', callback_data: 'start_pair', style: 'primary' }]])
+        const welcomeCaption = `👋 *Welcome to LËGĒNDÃRY BØT pairing!*\n\nTap below to link your WhatsApp number — your bot deploys automatically the moment it connects, no extra steps.`;
+        const welcomeButtons = Markup.inlineKeyboard([[{ text: '🔗 Pair Now', callback_data: 'start_pair', style: 'primary' }]]);
+        try {
+            await ctx.replyWithPhoto(
+                { source: path.join(__dirname, 'media', 'menu-banner.jpg') },
+                { caption: welcomeCaption, parse_mode: 'Markdown', ...welcomeButtons }
+            );
+        } catch (e) {
+            // Telegram's API can hiccup (socket hang up, timeout, etc.) — don't
+            // let a failed photo upload take down the whole bot. Fall back to
+            // a text-only welcome so the user still gets somewhere.
+            console.log(`⚠️ Couldn't send welcome photo: ${e.message}`);
+            try {
+                await ctx.replyWithMarkdown(welcomeCaption, welcomeButtons);
+            } catch (e2) {
+                console.log(`⚠️ Couldn't send welcome text either: ${e2.message}`);
             }
-        );
+        }
     });
 
     forceJoin.registerCheckHandler(bot);
@@ -467,9 +477,22 @@ function createBot(token) {
 
 for (const token of TOKENS) {
     const bot = createBot(token);
+    // Catch-all: any error thrown/rejected inside a handler lands here
+    // instead of crashing the whole process. Without this, one bad
+    // request (e.g. a Telegram API hiccup) takes the entire bot down.
+    bot.catch((err, ctx) => {
+        console.log(`⚠️ Bot error for update ${ctx.updateType}: ${err.message}`);
+    });
     bot.launch();
     console.log(`🤖 Pairing bot launched (token ending ...${token.slice(-6)})`);
 }
+
+// Last-resort safety net: log and survive instead of crashing on any
+// stray unhandled rejection elsewhere in the process (e.g. inside
+// notifyOwners' background calls, GitHub sync, etc.).
+process.on('unhandledRejection', (err) => {
+    console.log(`⚠️ Unhandled rejection (bot kept running): ${err && err.message ? err.message : err}`);
+});
 
 // Actual bot instances now run on Pterodactyl via multibot.js, not here on
 // Render. The Telegram bot's only job is to register pairings (spawn: false)
