@@ -355,12 +355,11 @@ case "update": {
     // instead of the dead legendarybot.dpdns.org server. No git needed
     // on the panel at all, just plain HTTPS GETs.
     //
-    // Hardcoded as defaults (not a secret, same for every paired
-    // instance) so .update works out of the box without needing
-    // config.env edited per instance. Still overridable via env vars
-    // if a specific instance ever needs to point elsewhere.
-    const GITHUB_OWNER = process.env.GITHUB_OWNER || 'LEGENDARY-AI2008';
-    const GITHUB_REPO = process.env.GITHUB_REPO || 'LEGENDARY-BOT-PAIRING-';
+    // GITHUB_REPO uses the same "owner/repo" convention as githubSync.js
+    // (one env var, not two) so there's only one place to configure it.
+    // Defaulted to the real repo so .update works out of the box.
+    const GITHUB_REPO_FULL = process.env.GITHUB_REPO || 'LEGENDARY-AI2008/Legendary-bot-pairing-site';
+    const [GITHUB_OWNER, GITHUB_REPO] = GITHUB_REPO_FULL.split('/');
     const GITHUB_BRANCH = process.env.GITHUB_BRANCH || 'main';
     // Split into case.js + cases/*.js on 2026-09-14 — .update now has to
     // check every piece, not just case.js, or edits to the category files
@@ -437,14 +436,25 @@ case "update": {
 
         await reply("✅ *Update complete!* Restarting all running bots now...");
         console.log(chalk.bgGreen.black("🔄 Files updated — restarting all instances"));
+
+        // Each bot instance is its own separate OS process (that's what
+        // keeps everyone's data isolated — see multibot.js), so this
+        // process calling instanceManager directly only ever sees ITSELF,
+        // never the others. Actually restarting everyone has to happen
+        // from multibot.js, the one process that started them all — so
+        // just drop a flag file with a timestamp; multibot.js's own poll
+        // loop (every 2 min, same one that picks up new pairings) checks
+        // for this and does the real restart-all from the right process.
         try {
-            const { restartAllInstances } = require(path.join(__dirname, '..', 'instanceManager'));
-            restartAllInstances(); // staggers restarts across every running instance, this one included
+            const flagPath = path.join(__dirname, '..', 'instances', 'update-flag.json');
+            fs.writeFileSync(flagPath, JSON.stringify({ requestedAt: Date.now(), requestedBy: process.env.SESSION_ID || 'unknown' }));
         } catch (e) {
-            // Fallback: at least restart the instance that ran .update.
-            console.log(chalk.red(`Couldn't reach instanceManager to restart all instances: ${e.message}`));
-            process.exit(0);
+            console.log(chalk.red(`Couldn't write update-flag.json: ${e.message}`));
         }
+        // Still restart THIS instance immediately rather than waiting up
+        // to 2 minutes for the poll loop — the exit is picked up as an
+        // unexpected exit and auto-respawned fresh within seconds.
+        process.exit(0);
     } catch (e) {
         if (e.response?.status === 404) {
             return reply(`❌ *Update failed:* a file wasn't found in the repo (checked ${rawBase}/...). Make sure the filenames match exactly, the repo is public, and \`GITHUB_BRANCH\` is correct.`);
