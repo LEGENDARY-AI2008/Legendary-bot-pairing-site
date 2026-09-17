@@ -781,21 +781,46 @@ break;
 
 case 'getdevice': {
     // Uses Baileys' own getDevice(id) utility — reads the platform hint
-    // baked into a message's ID, not a guess. Target = whoever's message
-    // is quoted, or the first tagged user (whose most recent message we
-    // then need the ID of — so for a plain tag we ask them to send/quote
-    // a message from that person instead, since a bare @mention carries
-    // no message ID to read).
+    // baked into a message's ID, not a guess. That means it always needs
+    // an actual message ID, so a bare phone number can't be decoded
+    // directly — for ".getdevice <number>" we instead look up the most
+    // recent message we've SEEN from that number in this chat (via the
+    // in-memory store bound in bot.js) and read that message's ID.
+    // Otherwise: whoever's message is quoted, or the first tagged user
+    // (a bare @mention alone carries no message ID, so that path still
+    // needs a follow-up quote).
     let targetMsgKey = null;
     let targetJid = null;
-    if (m.quoted) {
+
+    if (args[0]) {
+        // .getdevice 23496739368 — no tag/quote needed
+        const digits = args[0].replace(/[^0-9]/g, '');
+        if (!digits) {
+            return reply(`📱 *Get Device*\nUsage: ${prefix}getdevice <number>\nE.g. ${prefix}getdevice 23496739368`);
+        }
+        targetJid = `${digits}@s.whatsapp.net`;
+
+        let cached = null;
+        try {
+            const chatMsgs = store?.messages?.[m.chat]?.array || [];
+            cached = chatMsgs
+                .filter(msg => msg.key?.id && (msg.key.participant === targetJid || msg.key.remoteJid === targetJid))
+                .sort((a, b) => (b.messageTimestamp || 0) - (a.messageTimestamp || 0))[0];
+        } catch (_) {}
+
+        if (!cached) {
+            return reply(`📱 *Get Device*\nNo cached message from @${digits} in this chat yet. The in-memory store only remembers messages sent while the bot's been running (nothing survives a restart) — ask them to send anything here first, or reply to one of their messages with ${prefix}getdevice instead.`, [targetJid]);
+        }
+        targetMsgKey = cached.key.id;
+    } else if (m.quoted) {
         targetMsgKey = m.quoted.id || m.quoted.key?.id;
         targetJid = m.quoted.sender || m.quoted.participant;
     } else if (m.mentionedJid && m.mentionedJid[0]) {
         targetJid = m.mentionedJid[0];
     }
+
     if (!targetMsgKey) {
-        return reply(`📱 *Get Device*\nReply to a message from the person with ${prefix}getdevice — I need an actual message ID to read the device from (a bare @tag alone doesn't carry one).`);
+        return reply(`📱 *Get Device*\nReply to a message from the person, or use ${prefix}getdevice <number> — e.g. ${prefix}getdevice 23496739368.`);
     }
     if (typeof __baileys_getDevice !== 'function') {
         return reply('❌ *Get Device is unavailable* — the installed `@boruto_vk7/baileys` build doesn\'t export `getDevice`. Check the package version, or this needs a manual device-detect fallback.');
