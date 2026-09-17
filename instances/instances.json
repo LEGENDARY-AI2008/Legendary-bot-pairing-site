@@ -1,9 +1,9 @@
 {
   "pair-0db47e2b31f0": {
     "sessionId": "pair-0db47e2b31f0",
-    "pid": 350,
+    "pid": 362,
     "status": "stopped",
-    "deployedAt": "2026-09-17T21:39:46.169Z",
+    "deployedAt": "2026-09-17T21:41:46.231Z",
     "botConfig": {
       "ownerNumber": "2348137419241",
       "ownerName": "I AM THE REAL LEGEND 💀💀💀",
@@ -12,7 +12,7 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 7,
+    "crashCount": 8,
     "exitCode": 1
   }
 }
