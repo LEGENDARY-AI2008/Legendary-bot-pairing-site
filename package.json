@@ -3,11 +3,9 @@
   "version": "1.0.0",
   "description": "LËGĒNDÃRY BØT — WhatsApp bot with Telegram pairing and web panel",
   "main": "server.js",
-  "scripts": {
-    "start": "node server.js",
-    "bot": "node bot.js",
-    "pair": "node telegramPairBot.js"
-  },
+"scripts": {
+  "start": "concurrently \"node server.js\" \"node telegramPairBot.js\""
+}, 
   "dependencies": {
     "@boruto_vk7/baileys": "latest",
     "@distube/ytdl-core": "latest",
