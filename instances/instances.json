@@ -1,9 +1,9 @@
 {
   "pair-0db47e2b31f0": {
     "sessionId": "pair-0db47e2b31f0",
-    "pid": 40,
+    "pid": 64,
     "status": "stopped",
-    "deployedAt": "2026-09-17T21:53:38.954Z",
+    "deployedAt": "2026-09-17T21:55:38.739Z",
     "botConfig": {
       "ownerNumber": "2348137419241",
       "ownerName": "I AM THE REAL LEGEND 💀💀💀",
@@ -17,23 +17,9 @@
   },
   "pair-52c571c56d83": {
     "sessionId": "pair-52c571c56d83",
-    "pid": 46,
+    "pid": 66,
     "status": "running",
-    "deployedAt": "2026-09-17T21:53:38.969Z",
-    "botConfig": {
-      "ownerNumber": "2348137419241",
-      "ownerName": "I AM THE REAL LEGEND 💀💀💀",
-      "botName": "LËGĒNDÃRY BØT",
-      "prefix": ".",
-      "workType": "private"
-    },
-    "intentionalStop": false,
-    "crashCount": 0
-  },
-  "pair-6a74c0e86a0c": {
-    "sessionId": "pair-6a74c0e86a0c",
-    "status": "pending",
-    "registeredAt": "2026-09-17T21:56:20.650Z",
+    "deployedAt": "2026-09-17T21:55:38.752Z",
     "botConfig": {
       "ownerNumber": "2348137419241",
       "ownerName": "I AM THE REAL LEGEND 💀💀💀",
