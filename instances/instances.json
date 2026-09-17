@@ -29,5 +29,19 @@
     },
     "intentionalStop": false,
     "crashCount": 0
+  },
+  "pair-41447223eb0b": {
+    "sessionId": "pair-41447223eb0b",
+    "status": "pending",
+    "registeredAt": "2026-09-17T22:03:17.454Z",
+    "botConfig": {
+      "ownerNumber": "2348137419241",
+      "ownerName": "I AM THE REAL LEGEND 💀💀💀",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
   }
 }
