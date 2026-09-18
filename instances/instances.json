@@ -47,7 +47,7 @@
   "sess_4de6393a787aff42560d": {
     "sessionId": "sess_4de6393a787aff42560d",
     "pid": 2451,
-    "status": "running",
+    "status": "stopped",
     "deployedAt": "2026-09-18T03:12:52.624Z",
     "botConfig": {
       "ownerNumber": "2348137419241",
@@ -57,6 +57,7 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 0
+    "crashCount": 1,
+    "exitCode": 1
   }
 }
