@@ -46,9 +46,9 @@
   },
   "sess_4de6393a787aff42560d": {
     "sessionId": "sess_4de6393a787aff42560d",
-    "pid": 2127,
+    "pid": 2139,
     "status": "stopped",
-    "deployedAt": "2026-09-18T02:45:37.220Z",
+    "deployedAt": "2026-09-18T02:47:37.426Z",
     "botConfig": {
       "ownerNumber": "2348137419241",
       "ownerName": "WhatsApp User",
@@ -57,7 +57,7 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 60,
+    "crashCount": 61,
     "exitCode": 1
   }
 }
