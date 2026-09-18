@@ -73,5 +73,19 @@
     },
     "intentionalStop": false,
     "crashCount": 0
+  },
+  "sess_461582d056326ee21898": {
+    "sessionId": "sess_461582d056326ee21898",
+    "status": "pending",
+    "registeredAt": "2026-09-18T05:13:22.580Z",
+    "botConfig": {
+      "ownerNumber": "2348063788754",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
   }
 }
