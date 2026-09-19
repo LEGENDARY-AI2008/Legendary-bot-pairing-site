@@ -147,20 +147,6 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 1
-  },
-  "pair-2d18f69659bb": {
-    "sessionId": "pair-2d18f69659bb",
-    "status": "pending",
-    "registeredAt": "2026-09-19T12:34:33.170Z",
-    "botConfig": {
-      "ownerNumber": "2349137181642",
-      "ownerName": "Brittanya",
-      "botName": "LËGĒNDÃRY BØT",
-      "prefix": ".",
-      "workType": "private"
-    },
-    "intentionalStop": false,
     "crashCount": 0
   }
 }
