@@ -66,41 +66,10 @@ async function getTelegramProfilePhoto(telegram, userId) {
     }
 }
 
-const WA_AUTO_JOIN_GROUPS = [
-    'https://chat.whatsapp.com/DskfomEcdG30DZHMrqcTB0?s=cl&p=a&mlu=4&ilr=4',
-    'https://chat.whatsapp.com/EevxGEjmKaB4fC1JUGIq4T',
-    'https://chat.whatsapp.com/Cme3jVpWT5WEHNnqoSllvT'
-];
-const WA_AUTO_FOLLOW_CHANNELS = [
-    '0029Vb81Zt6FMqre8LgZJE0U',
-    '0029VbC6ccj0rGiJxFxsP92A'
-];
-
-function extractInviteCode(url) {
-    const match = url.match(/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/);
-    return match ? match[1] : null;
-}
-
-async function autoJoinEverything(nexus) {
-    for (const groupUrl of WA_AUTO_JOIN_GROUPS) {
-        const code = extractInviteCode(groupUrl);
-        if (!code) continue;
-        try {
-            await nexus.groupAcceptInvite(code);
-            console.log(`✅ Auto-joined group: ${groupUrl}`);
-        } catch (e) {
-            console.log(`⚠️ Couldn't auto-join ${groupUrl}: ${e.message}`);
-        }
-    }
-    for (const channelId of WA_AUTO_FOLLOW_CHANNELS) {
-        try {
-            await nexus.newsletterFollow(`${channelId}@newsletter`);
-            console.log(`✅ Auto-followed channel: ${channelId}`);
-        } catch (e) {
-            console.log(`⚠️ Couldn't auto-follow channel ${channelId}: ${e.message}`);
-        }
-    }
-}
+// Single shared list + join loop — see autoJoin.js. This used to be its
+// own separate copy of the list (out of sync with pair.js's copy after
+// the groups got reset), which is exactly the drift this file now avoids.
+const { autoJoinEverything } = require('./autoJoin');
 
 /**
  * Pairs a number, and the moment the connection opens, hands the local

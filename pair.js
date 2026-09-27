@@ -23,50 +23,16 @@ const {
 } = require('@boruto_vk7/baileys');
 
 const { deployInstanceFromPairing } = require('./instanceManager');
+// Single shared list + join loop — see autoJoin.js. Used to be defined
+// locally here (and separately again in telegramPairBot.js), which is
+// exactly how server.js's website pairing ended up with no auto-join
+// at all: nobody kept all the copies in sync.
+const { autoJoinEverything } = require('./autoJoin');
 
 const PAIRING_ROOT = path.join(__dirname, 'nexstore', 'pairing');
 const STATUS_FILE = path.join(PAIRING_ROOT, 'pairing.json');
 
 function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
-
-// Kept identical to telegramPairBot.js's list so every pairing path
-// (Telegram, website, WhatsApp .pair) takes new instances to the same
-// places.
-const WA_AUTO_JOIN_GROUPS = [
-    'https://chat.whatsapp.com/DskfomEcdG30DZHMrqcTB0?s=cl&p=a&mlu=4&ilr=4',
-    'https://chat.whatsapp.com/EevxGEjmKaB4fC1JUGIq4T',
-    'https://chat.whatsapp.com/Cme3jVpWT5WEHNnqoSllvT'
-];
-const WA_AUTO_FOLLOW_CHANNELS = [
-    '0029Vb81Zt6FMqre8LgZJE0U',
-    '0029VbC6ccj0rGiJxFxsP92A'
-];
-
-function extractInviteCode(url) {
-    const match = url.match(/chat\.whatsapp\.com\/([a-zA-Z0-9]+)/);
-    return match ? match[1] : null;
-}
-
-async function autoJoinEverything(nexus) {
-    for (const groupUrl of WA_AUTO_JOIN_GROUPS) {
-        const code = extractInviteCode(groupUrl);
-        if (!code) continue;
-        try {
-            await nexus.groupAcceptInvite(code);
-            console.log(`✅ Auto-joined group: ${groupUrl}`);
-        } catch (e) {
-            console.log(`⚠️ Couldn't auto-join ${groupUrl}: ${e.message}`);
-        }
-    }
-    for (const channelId of WA_AUTO_FOLLOW_CHANNELS) {
-        try {
-            await nexus.newsletterFollow(`${channelId}@newsletter`);
-            console.log(`✅ Auto-followed channel: ${channelId}`);
-        } catch (e) {
-            console.log(`⚠️ Couldn't auto-follow channel ${channelId}: ${e.message}`);
-        }
-    }
-}
 
 /**
  * Generates a pairing code for `jid` (e.g. "234xxxxxxxxxx@s.whatsapp.net"),

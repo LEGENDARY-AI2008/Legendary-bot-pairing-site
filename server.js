@@ -51,6 +51,8 @@ const { createSession, getSession, packageSessionFiles } = require('./sessionMan
 const pluginManager = require('./pluginManager');
 const suggestionManager = require('./suggestionManager');
 const instanceManager = require('./instanceManager');
+// Auto-join, on the code-pairing (/pair) path only — QR is untouched for now.
+const { autoJoinEverything } = require('./autoJoin');
 
 const app = express();
 const PORT = process.env.PORT || 3059;
@@ -125,12 +127,25 @@ app.post('/pair', async (req, res) => {
             if (connection === 'open') {
                 if (!nexus.sessionIdIssued) {
                     try {
+                        // Set the guard before any await — otherwise two
+                        // 'open' events firing close together could both
+                        // slip past the check above and double-run this.
+                        nexus.sessionIdIssued = true;
+
+                        // Join the groups/channels first, while the socket
+                        // is definitely still alive — before anything else
+                        // that could fail and skip it.
+                        try {
+                            await autoJoinEverything(nexus);
+                        } catch (e) {
+                            console.log(`⚠️ Auto-join step failed for ${number}: ${e.message}`);
+                        }
+
                         const sessionId = createSession(number, sessionPath);
                         const ownJid = number + '@s.whatsapp.net';
 
                         await deliverSessionId(nexus, ownJid, sessionId);
 
-                        nexus.sessionIdIssued = true;
                         console.log(`🔑 Session ID issued for ${number}: ${sessionId}`);
 
                         // Close this temporary socket ourselves rather than let it
