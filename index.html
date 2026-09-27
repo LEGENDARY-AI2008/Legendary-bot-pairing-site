@@ -229,6 +229,159 @@
     letter-spacing:.02em;
     opacity:0; animation:rise .7s cubic-bezier(.2,.8,.2,1) .3s forwards;
   }
+  .tabs{
+    display:flex;
+    margin-top:22px;
+    border:1px solid var(--panel-line);
+    border-radius:12px;
+    padding:4px;
+    background:#0A0C1E;
+  }
+  .tab-btn{
+    flex:1;
+    padding:10px;
+    border:none;
+    border-radius:9px;
+    background:none;
+    color:var(--muted);
+    font-family:'Inter',sans-serif;
+    font-size:.9rem;
+    font-weight:500;
+    cursor:pointer;
+    transition:background .15s ease, color .15s ease;
+  }
+  .tab-btn.active{
+    background:var(--accent);
+    color:#0A0620;
+  }
+  .pane{display:none;}
+  .pane.active{display:block;}
+  .qr-box{
+    margin-top:22px;
+    text-align:center;
+    border:1px solid var(--panel-line);
+    border-radius:12px;
+    padding:22px 16px;
+    background:#0A0C1E;
+  }
+  .qr-box img{
+    width:220px; height:220px;
+    max-width:100%;
+    border-radius:10px;
+    background:#fff;
+    padding:10px;
+  }
+  .qr-box .label{
+    font-size:.78rem;
+    color:var(--muted);
+    margin-bottom:14px;
+  }
+  .creator-card{
+    margin-top:28px;
+    width:100%;
+    background:linear-gradient(180deg, var(--panel), #0C0E22);
+    border:1px solid var(--panel-line);
+    border-radius:18px;
+    padding:26px 24px;
+    text-align:left;
+    opacity:0; transform:translateY(14px);
+    animation:rise .7s cubic-bezier(.2,.8,.2,1) .25s forwards;
+  }
+  .creator-header{
+    display:flex; align-items:center; gap:14px;
+  }
+  .creator-avatar{
+    flex-shrink:0;
+    width:46px; height:46px;
+    display:flex; align-items:center; justify-content:center;
+    font-size:1.4rem;
+    border-radius:50%;
+    background:var(--accent-soft);
+    border:1px solid var(--panel-line);
+  }
+  .creator-name{
+    font-family:'Space Grotesk',sans-serif;
+    font-weight:600;
+    font-size:1rem;
+    color:var(--text);
+  }
+  .creator-role{
+    margin-top:2px;
+    font-size:.8rem;
+    color:var(--muted);
+  }
+  .creator-bio{
+    margin-top:14px;
+    font-size:.88rem;
+    color:var(--muted);
+    line-height:1.6;
+  }
+  .creator-links{
+    margin-top:16px;
+    display:flex; flex-wrap:wrap; gap:8px;
+  }
+  .creator-link{
+    display:flex; align-items:center; gap:6px;
+    padding:8px 12px;
+    border-radius:10px;
+    border:1px solid var(--panel-line);
+    color:var(--text);
+    text-decoration:none;
+    font-size:.82rem;
+    font-weight:500;
+    transition:border-color .15s ease, background .15s ease;
+  }
+  .creator-link:hover{border-color:var(--accent); background:var(--accent-soft);}
+  .creator-details{
+    margin-top:16px;
+    border-top:1px solid var(--panel-line);
+    padding-top:14px;
+  }
+  .creator-details summary{
+    cursor:pointer;
+    list-style:none;
+    font-size:.85rem;
+    color:var(--accent);
+    font-weight:500;
+    display:flex; align-items:center; gap:6px;
+    user-select:none;
+  }
+  .creator-details summary::-webkit-details-marker{display:none;}
+  .creator-details summary::before{
+    content:'▸';
+    font-size:.75rem;
+    transition:transform .15s ease;
+  }
+  .creator-details[open] summary::before{transform:rotate(90deg);}
+  .creator-more{
+    margin-top:14px;
+    font-size:.85rem;
+    color:var(--muted);
+    line-height:1.7;
+  }
+  .creator-more h4{
+    margin-top:16px;
+    font-size:.8rem;
+    color:var(--text);
+    font-weight:600;
+  }
+  .creator-more h4:first-child{margin-top:0;}
+  .creator-more ul{
+    margin-top:6px;
+    padding-left:18px;
+  }
+  .creator-more .chips{
+    margin-top:8px;
+    display:flex; flex-wrap:wrap; gap:6px;
+  }
+  .creator-more .chip{
+    padding:4px 10px;
+    border-radius:20px;
+    background:#0A0C1E;
+    border:1px solid var(--panel-line);
+    font-size:.76rem;
+    color:var(--muted);
+  }
   @keyframes rise{to{opacity:1; transform:translateY(0);}}
   @keyframes blink{50%{opacity:0;}}
   @keyframes pulse{0%,100%{opacity:1;} 50%{opacity:.35;}}
@@ -240,7 +393,7 @@
     canvas#orbs{display:none;}
   }
 
-  button.primary:focus-visible, .field input:focus-visible, .tg-link:focus-visible{
+  button.primary:focus-visible, .field input:focus-visible, .tg-link:focus-visible, .tab-btn:focus-visible{
     outline:2px solid var(--accent);
     outline-offset:2px;
   }
@@ -255,30 +408,53 @@
   <p class="tagline">Link your WhatsApp number and your bot goes live automatically — no code, no panel.</p>
 
   <div class="card">
-    <h2>Pair your number</h2>
-    <p class="sub">Enter your WhatsApp number with country code, no plus sign, no spaces.</p>
+    <h2>Pair your bot</h2>
+    <p class="sub">Choose a number or scan a QR — either way your bot goes live automatically.</p>
 
-    <div class="field">
-      <span class="prefix">+</span>
-      <input id="numberInput" type="tel" inputmode="numeric" placeholder="234xxxxxxxxxx" autocomplete="tel" />
+    <div class="tabs">
+      <button class="tab-btn active" id="numberTabBtn" type="button">Number</button>
+      <button class="tab-btn" id="qrTabBtn" type="button">QR Code</button>
     </div>
-    <button class="primary" id="pairBtn">Get pairing code</button>
-    <p class="error" id="errorMsg"></p>
-    <p class="hint">We'll show a one-time code — enter it in WhatsApp → Linked Devices.</p>
 
-    <div class="code-box" id="codeBox">
-      <div class="label">Your pairing code</div>
-      <div class="code-value" id="codeValue"><span class="cursor"></span></div>
-      <div class="steps">
-        <b>1.</b> Open WhatsApp → Settings → Linked Devices<br>
-        <b>2.</b> Tap <b>Link a Device</b> → <b>Link with phone number instead</b><br>
-        <b>3.</b> Enter the code above
+    <div class="pane active" id="numberPane">
+      <div class="field">
+        <span class="prefix">+</span>
+        <input id="numberInput" type="tel" inputmode="numeric" placeholder="234xxxxxxxxxx" autocomplete="tel" />
       </div>
-      <div class="status-line">
-        <span class="dot waiting" id="statusDot"></span>
-        <span id="statusText">waiting for confirmation on your phone…</span>
+      <button class="primary" id="pairBtn">Get pairing code</button>
+      <p class="error" id="errorMsg"></p>
+      <p class="hint">We'll show a one-time code — enter it in WhatsApp → Linked Devices.</p>
+
+      <div class="code-box" id="codeBox">
+        <div class="label">Your pairing code</div>
+        <div class="code-value" id="codeValue"><span class="cursor"></span></div>
+        <div class="steps">
+          <b>1.</b> Open WhatsApp → Settings → Linked Devices<br>
+          <b>2.</b> Tap <b>Link a Device</b> → <b>Link with phone number instead</b><br>
+          <b>3.</b> Enter the code above
+        </div>
+        <div class="status-line">
+          <span class="dot waiting" id="statusDot"></span>
+          <span id="statusText">waiting for confirmation on your phone…</span>
+        </div>
+        <div class="success" id="successBox">✅ Connected — your bot is live. You can close this page.</div>
       </div>
-      <div class="success" id="successBox">✅ Connected — your bot is live. You can close this page.</div>
+    </div>
+
+    <div class="pane" id="qrPane">
+      <button class="primary" id="qrBtn">Get QR code</button>
+      <p class="error" id="qrErrorMsg"></p>
+      <p class="hint">Open WhatsApp → Settings → Linked Devices → Link a Device, then scan the code below.</p>
+
+      <div class="qr-box" id="qrBox" style="display:none;">
+        <div class="label">Scan with WhatsApp</div>
+        <img id="qrImage" alt="WhatsApp QR code" />
+        <div class="status-line" style="justify-content:center; margin-top:16px;">
+          <span class="dot waiting" id="qrStatusDot"></span>
+          <span id="qrStatusText">waiting for scan…</span>
+        </div>
+        <div class="success" id="qrSuccessBox">✅ Connected — your bot is live. You can close this page.</div>
+      </div>
     </div>
 
     <div class="divider">or pair via Telegram</div>
@@ -290,6 +466,59 @@
       <svg width="20" height="20" viewBox="0 0 24 24" fill="#2AABEE"><path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm5.57 8.16-1.72 8.13c-.13.58-.47.72-.96.45l-2.65-1.96-1.28 1.23c-.14.14-.26.26-.53.26l.19-2.69 4.9-4.43c.21-.19-.05-.3-.33-.11l-6.06 3.81-2.61-.82c-.57-.18-.58-.57.12-.84l10.2-3.93c.47-.17.89.11.73.9z"/></svg>
       @legendary001bot
     </a>
+  </div>
+
+  <div class="creator-card">
+    <div class="creator-header">
+      <span class="creator-avatar">👑</span>
+      <div>
+        <div class="creator-name">Ayantunde Praise — "LEGEND"</div>
+        <div class="creator-role">Founder &amp; Lead Developer, LËGĒNDÃRY Ł𝗮𝗯𝘀™ STUDIO</div>
+      </div>
+    </div>
+    <p class="creator-bio">Nigerian technology creator, software developer, cybersecurity enthusiast and digital innovator — building AI, automation, bots and other digital solutions through LËGĒNDÃRY Ł𝗮𝗯𝘀™ STUDIO.</p>
+
+    <div class="creator-links">
+      <a class="creator-link" href="https://github.com/LEGENDARY-AI2008" target="_blank" rel="noopener">GitHub</a>
+      <a class="creator-link" href="https://t.me/lordpraise001" target="_blank" rel="noopener">Telegram</a>
+      <a class="creator-link" href="mailto:legendarylabsupport@gmail.com">Support</a>
+    </div>
+
+    <details class="creator-details">
+      <summary>More about Legend &amp; the studio</summary>
+      <div class="creator-more">
+        <h4>About LËGĒNDÃRY Ł𝗮𝗯𝘀™ STUDIO</h4>
+        <p>A growing technology laboratory focused on creating accessible, innovative digital tools — WhatsApp and Telegram bots, AI systems, automation, web applications, deployment tools, graphics and other technology solutions.</p>
+
+        <h4>Skills &amp; Expertise</h4>
+        <div class="chips">
+          <span class="chip">JavaScript &amp; Python</span>
+          <span class="chip">Node.js &amp; React</span>
+          <span class="chip">AI &amp; Automation</span>
+          <span class="chip">WhatsApp Bot Dev</span>
+          <span class="chip">Telegram Bot Dev</span>
+          <span class="chip">Cybersecurity</span>
+          <span class="chip">API Integration</span>
+          <span class="chip">Linux / VPS &amp; Cloud</span>
+          <span class="chip">Graphics Design</span>
+          <span class="chip">Video Editing</span>
+        </div>
+
+        <h4>Major Projects</h4>
+        <ul>
+          <li><b>LËGĒNDÃRY BØT</b> — WhatsApp automation with AI tools, group management, media tools, downloaders, football features and more.</li>
+          <li><b>Legendary AI</b> — an AI-focused project in the LËGĒNDÃRY ecosystem.</li>
+          <li><b>Legendary Personal Bot Platform</b> — a platform for users to create and manage their own personal automation/bot systems.</li>
+          <li>Various Telegram bots, web apps and deployment systems across the LËGĒNDÃRY ecosystem.</li>
+        </ul>
+
+        <h4>Education</h4>
+        <p>Federal University of Technology, Akure (FUTA) — School of Earth and Mineral Sciences, Department of Remote Sensing and Geosciences Information Systems.</p>
+
+        <h4>Vision</h4>
+        <p>Making technology more accessible and growing LËGĒNDÃRY Ł𝗮𝗯𝘀™ STUDIO into a major technology laboratory — combining creativity, software development and automation to build real-world solutions.</p>
+      </div>
+    </details>
   </div>
 
   <footer>legendary-lab · pairing v1</footer>
@@ -438,6 +667,82 @@ function startPolling(number){
 
 pairBtn.addEventListener('click', requestCode);
 numberInput.addEventListener('keydown', e => { if (e.key === 'Enter') requestCode(); });
+
+// ---- tab switching ----
+const numberTabBtn = document.getElementById('numberTabBtn');
+const qrTabBtn = document.getElementById('qrTabBtn');
+const numberPane = document.getElementById('numberPane');
+const qrPane = document.getElementById('qrPane');
+
+function showTab(tab){
+  const isNumber = tab === 'number';
+  numberTabBtn.classList.toggle('active', isNumber);
+  qrTabBtn.classList.toggle('active', !isNumber);
+  numberPane.classList.toggle('active', isNumber);
+  qrPane.classList.toggle('active', !isNumber);
+}
+numberTabBtn.addEventListener('click', () => showTab('number'));
+qrTabBtn.addEventListener('click', () => showTab('qr'));
+
+// ---- QR pairing flow ----
+const qrBtn = document.getElementById('qrBtn');
+const qrErrorMsg = document.getElementById('qrErrorMsg');
+const qrBox = document.getElementById('qrBox');
+const qrImage = document.getElementById('qrImage');
+const qrStatusDot = document.getElementById('qrStatusDot');
+const qrStatusText = document.getElementById('qrStatusText');
+const qrSuccessBox = document.getElementById('qrSuccessBox');
+
+let qrPollTimer = null;
+
+async function requestQr(){
+  qrErrorMsg.style.display = 'none';
+  qrBtn.disabled = true;
+  qrBtn.textContent = 'Loading QR…';
+
+  try {
+    const res = await fetch(`${API_BASE}/qr`);
+    const data = await res.json();
+
+    if (!res.ok || data.error) {
+      throw new Error(data.error || 'Could not generate a QR code.');
+    }
+
+    qrImage.src = data.qr;
+    qrBox.style.display = 'block';
+    qrStatusDot.className = 'dot waiting';
+    qrStatusText.textContent = 'waiting for scan…';
+    qrSuccessBox.style.display = 'none';
+    qrBtn.textContent = 'Refresh QR code';
+    qrBtn.disabled = false;
+    startQrPolling();
+  } catch (e) {
+    qrErrorMsg.textContent = e.message || 'Could not reach the server. Try again.';
+    qrErrorMsg.style.display = 'block';
+    qrBtn.disabled = false;
+    qrBtn.textContent = 'Get QR code';
+  }
+}
+
+function startQrPolling(){
+  if (qrPollTimer) clearInterval(qrPollTimer);
+  qrPollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`${API_BASE}/qr/status`);
+      const data = await res.json();
+      if (data.linked) {
+        clearInterval(qrPollTimer);
+        qrStatusDot.className = 'dot live';
+        qrStatusText.textContent = 'connected';
+        qrSuccessBox.style.display = 'block';
+        qrBtn.textContent = 'Connected';
+        qrBtn.disabled = true;
+      }
+    } catch {}
+  }, 3000);
+}
+
+qrBtn.addEventListener('click', requestQr);
 </script>
 </body>
 </html>
