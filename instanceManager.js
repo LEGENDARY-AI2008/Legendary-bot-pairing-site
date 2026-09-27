@@ -162,6 +162,20 @@ function deployInstance({ sessionId, botConfig, spawn: shouldSpawn = true }) {
             return;
         }
 
+        // Exit code 75 is bot.js's own signal for "this WhatsApp session
+        // logged out permanently" (DisconnectReason.loggedOut) — see
+        // bot.js's connection.update handler. That's not a crash and a
+        // respawn can never fix it (the creds are dead), so this fully
+        // removes the instance — local folder, DB entry, and its GitHub
+        // backups — instead of leaving a dead folder taking up space
+        // forever, which is what was happening before.
+        if (code === 75) {
+            runningProcesses.delete(sessionId);
+            console.log(`👋 ${sessionId} logged out — removing instance.`);
+            removeInstance(sessionId);
+            return;
+        }
+
         current[sessionId].status = 'stopped';
         current[sessionId].exitCode = code;
 
@@ -308,6 +322,14 @@ function removeInstance(sessionId) {
     } catch (e) {
         console.log(`⚠️  removeInstance: couldn't delete folder for ${sessionId}: ${e.message}`);
     }
+
+    // Also stop backing this dead session up forever — fire-and-forget,
+    // never blocks the local cleanup above even if GitHub is unreachable.
+    // This is the piece that was missing: local folders were being
+    // deleted (when this ran at all) but the GitHub copies never were,
+    // so sessions/<id>.json and its instances.json entry just piled up.
+    githubSync.deleteSessionFiles(sessionId).catch(() => {});
+    githubSync.deleteInstanceEntry(sessionId).catch(() => {});
 
     return { success: true, message: 'Instance removed.' };
 }

@@ -36,6 +36,13 @@ const config = {
     sudoNumbers: (process.env.SUDO_NUMBERS || '').split(',').map(n => n.trim()).filter(Boolean)
 };
 
+// Consecutive reconnect attempts since the last successful 'open' — reset
+// to 0 there, incremented on every reconnect-able 'close'. Once it hits
+// MAX_RECONNECT_ATTEMPTS without ever reaching 'open' again, the instance
+// is wiped instead of retried forever (see connection.update below).
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 2;
+
 function printBanner() {
     console.log(chalk.hex('#e8b54d')(`
   ██╗     ██╗   ██╗    ██████╗  ██████╗ ████████╗
@@ -191,6 +198,7 @@ async function startBot() {
 
         if (connection === 'open') {
             console.log(chalk.bgGreen.black(`✅ ${config.botName} connected successfully!`));
+            reconnectAttempts = 0; // a successful connection clears any prior retry count
             sendWelcomeMessage(sock).catch(e =>
                 console.log(chalk.red(`Welcome message error: ${e.message}`))
             );
@@ -226,10 +234,34 @@ async function startBot() {
         if (connection === 'close') {
             const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
             console.log(chalk.red(`Connection closed. Reconnecting: ${shouldReconnect}`));
-            // Was calling startBot() with zero delay — reconnecting instantly
-            // and repeatedly on every drop is a known way to get WhatsApp to
-            // treat the session as unstable and drop it again shortly after.
-            if (shouldReconnect) setTimeout(() => startBot(), 5000);
+            if (shouldReconnect) {
+                if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
+                    // Already retried twice and still can't get back in —
+                    // a dead network/proxy issue would usually recover within
+                    // that, so at this point it's almost certainly a genuinely
+                    // broken session. Stop burning cycles retrying forever and
+                    // wipe it the same way a permanent logout does.
+                    console.log(chalk.red(`Gave up after ${reconnectAttempts} reconnect attempts — exiting for cleanup.`));
+                    process.exit(75);
+                    return;
+                }
+                reconnectAttempts++;
+                // Was calling startBot() with zero delay — reconnecting instantly
+                // and repeatedly on every drop is a known way to get WhatsApp to
+                // treat the session as unstable and drop it again shortly after.
+                console.log(chalk.yellow(`Reconnect attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in 5s...`));
+                setTimeout(() => startBot(), 5000);
+            } else {
+                // Logged out for good (unlinked from phone, banned, etc.) — there's
+                // no session left to reconnect with. Exit with a distinct code so
+                // instanceManager.js (the parent process that spawned this bot) can
+                // tell this apart from a crash and fully remove this instance —
+                // local folder, DB entry, and its GitHub backups — instead of
+                // respawning a bot that can never reconnect, or leaving it behind
+                // forever taking up space.
+                console.log(chalk.red('Session logged out permanently — exiting for cleanup.'));
+                process.exit(75);
+            }
         }
     });
 
