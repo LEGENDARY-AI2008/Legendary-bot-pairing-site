@@ -14,21 +14,6 @@
     "intentionalStop": false,
     "crashCount": 10
   },
-  "pair-52c571c56d83": {
-    "sessionId": "pair-52c571c56d83",
-    "pid": 66,
-    "status": "running",
-    "deployedAt": "2026-09-17T21:55:38.752Z",
-    "botConfig": {
-      "ownerNumber": "2348137419241",
-      "ownerName": "I AM THE REAL LEGEND 💀💀💀",
-      "botName": "LËGĒNDÃRY BØT",
-      "prefix": ".",
-      "workType": "private"
-    },
-    "intentionalStop": false,
-    "crashCount": 0
-  },
   "sess_66ce0596542708dcc0af": {
     "sessionId": "sess_66ce0596542708dcc0af",
     "pid": 316,
