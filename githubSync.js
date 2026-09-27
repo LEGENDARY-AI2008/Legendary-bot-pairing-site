@@ -235,4 +235,64 @@ async function fetchSessionFiles(sessionId) {
     return JSON.parse(Buffer.from(remote.content, 'base64').toString('utf-8'));
 }
 
-module.exports = { restoreFromGitHub, backupToGitHub, startAutoSync, SYNC_FILES, enabled, pushSessionFiles, fetchSessionFiles, pushInstanceEntry };
+/**
+ * Deletes one file from the repo outright (GitHub's DELETE contents API,
+ * which requires the file's current sha). No-ops quietly if the file is
+ * already gone — deleting something twice shouldn't be an error.
+ */
+async function deleteRemoteFile(repoPath) {
+    const remote = await getRemoteFile(repoPath);
+    if (!remote) return; // already gone — nothing to do
+    const url = `${API_ROOT}/repos/${GITHUB_REPO}/contents/${encodeURIComponent(repoPath)}`;
+    const body = {
+        message: `sync: remove ${repoPath} — ${new Date().toISOString()}`,
+        sha: remote.sha,
+        branch: GITHUB_BRANCH,
+    };
+    const res = await fetch(url, {
+        method: 'DELETE',
+        headers: { ...ghHeaders(), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`GitHub DELETE ${repoPath} failed: ${res.status} ${await res.text()}`);
+}
+
+/**
+ * Removes one sessionId's session bundle (sessions/<sessionId>.json) from
+ * GitHub. Call this once a WhatsApp session has logged out for good — the
+ * creds are dead, so there's nothing left worth backing up, and leaving it
+ * behind just takes up space in the repo forever.
+ */
+async function deleteSessionFiles(sessionId) {
+    if (!enabled()) return;
+    try {
+        await deleteRemoteFile(`sessions/${sessionId}.json`);
+        console.log(`🗑️  githubSync: deleted session backup for ${sessionId} from GitHub`);
+    } catch (e) {
+        console.log(`⚠️  githubSync: couldn't delete session backup for ${sessionId}: ${e.message}`);
+    }
+}
+
+/**
+ * Removes just ONE sessionId's entry from instances.json on GitHub — same
+ * careful read-modify-write pattern as pushInstanceEntry above, never a
+ * bulk overwrite, so it can't clobber another host's entries for other
+ * sessions while this one is being cleaned up.
+ */
+async function deleteInstanceEntry(sessionId) {
+    if (!enabled()) return;
+    const repoPath = 'instances/instances.json';
+    try {
+        const remote = await getRemoteFile(repoPath);
+        if (!remote?.content) return;
+        const current = JSON.parse(Buffer.from(remote.content, 'base64').toString('utf-8'));
+        if (!(sessionId in current)) return;
+        delete current[sessionId];
+        await putRemoteFile(repoPath, JSON.stringify(current, null, 2), remote.sha);
+        console.log(`🗑️  githubSync: removed ${sessionId} from instances.json on GitHub`);
+    } catch (e) {
+        console.log(`⚠️  githubSync: couldn't remove ${sessionId} from instances.json: ${e.message}`);
+    }
+}
+
+module.exports = { restoreFromGitHub, backupToGitHub, startAutoSync, SYNC_FILES, enabled, pushSessionFiles, fetchSessionFiles, pushInstanceEntry, deleteSessionFiles, deleteInstanceEntry };
