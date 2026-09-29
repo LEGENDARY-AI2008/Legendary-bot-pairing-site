@@ -2,12 +2,23 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const githubSync = require('./githubSync');
+const sessionStore = require('./sessionStore');
 
 const DB_FILE = path.join(__dirname, 'instances', 'instances.json');
 const INSTANCES_DIR = path.join(__dirname, 'instances');
 
 // No cap — unlimited concurrent instances.
-const MAX_CONCURRENT_INSTANCES = Infinity;
+// Render RAM is limited (~100-150MB per bot process). Set MAX_INSTANCES in Render env to protect the box.
+const MAX_CONCURRENT_INSTANCES = parseInt(process.env.MAX_INSTANCES || '0', 10) || Infinity;
+
+// Last log lines per instance kept IN MEMORY (no output.log file eating disk)
+const logBuffers = new Map();
+function pushLog(id, chunk) {
+    let buf = logBuffers.get(id);
+    if (!buf) { buf = []; logBuffers.set(id, buf); }
+    String(chunk).split('\n').forEach(l => { if (l.trim()) buf.push(l); });
+    if (buf.length > 200) buf.splice(0, buf.length - 200);
+}
 
 function ensureDB() {
     if (!fs.existsSync(INSTANCES_DIR)) fs.mkdirSync(INSTANCES_DIR, { recursive: true });
@@ -36,6 +47,23 @@ function getInstance(sessionId) {
 }
 
 /**
+ * Messages coming up from a bot child process.
+ *  - session       : its latest tiny session blob -> memory + GitHub
+ *  - deploy-paired : someone paired a NEW number via the .pair command inside a bot
+ */
+function handleChildMessage(sessionId, msg) {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.type === 'session' && msg.blob) {
+        sessionStore.set(sessionId, msg.blob);
+    } else if (msg.type === 'deploy-paired' && msg.instanceId && msg.blob) {
+        deployInstanceFromPairing({
+            instanceId: msg.instanceId, blob: msg.blob, fullBlob: msg.fullBlob,
+            botConfig: msg.botConfig
+        });
+    }
+}
+
+/**
  * Deploys a bot instance for the given session — one per session ID, enforced.
  * @param {object} opts { sessionId, botConfig: { ownerNumber, ownerName, botName, prefix, workType } }
  * @returns {object} { success, message }
@@ -54,16 +82,21 @@ function deployInstance({ sessionId, botConfig, spawn: shouldSpawn = true }) {
     const instanceDir = path.join(INSTANCES_DIR, sessionId);
     if (!fs.existsSync(instanceDir)) fs.mkdirSync(instanceDir, { recursive: true });
 
-    // Write this instance's own config.env
-    const envLines = [
-        `SESSION_ID=${sessionId}`,
-        `OWNER_NUMBER=${botConfig.ownerNumber}`,
-        `OWNER_NAME=${botConfig.ownerName}`,
-        `BOT_NAME=${botConfig.botName || 'LËGĒNDÃRY BØT'}`,
-        `PREFIX=${botConfig.prefix || '.'}`,
-        `WORKTYPE=${botConfig.workType || 'private'}`
-    ];
-    fs.writeFileSync(path.join(instanceDir, 'config.env'), envLines.join('\n'));
+    // Config goes in through the child's environment — no config.env file.
+    const childEnv = {
+        ...process.env,
+        SESSION_ID: sessionId,
+        OWNER_NUMBER: String(botConfig.ownerNumber),
+        OWNER_NAME: botConfig.ownerName || 'Owner',
+        BOT_NAME: botConfig.botName || 'LËGĒNDÃRY BØT',
+        PREFIX: botConfig.prefix || '.',
+        WORKTYPE: botConfig.workType || 'private'
+    };
+
+    const bootBlob = sessionStore.takeBootBlob(sessionId);
+    if (!bootBlob && shouldSpawn) {
+        return { success: false, message: 'No saved session for this bot. Pair again.' };
+    }
 
     // spawn: false — used by server.js (Render) now that actual bot
     // processes run on Pterodactyl via multibot.js. Render still needs
@@ -100,37 +133,19 @@ function deployInstance({ sessionId, botConfig, spawn: shouldSpawn = true }) {
     // instance's creds/settings/economy/etc — only the CODE is now shared.
     const child = spawn('node', [path.join(__dirname, 'bot.js')], {
         cwd: instanceDir,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        env: childEnv,
+        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
         detached: false
     });
 
-    const logPath = path.join(instanceDir, 'output.log');
-    const MAX_LOG_SIZE = 5 * 1024 * 1024; // 5MB cap
+    // Hand the session straight to the child over IPC (instant, no disk, no GitHub round trip).
+    child.send({ type: 'init', blob: bootBlob });
+    // The child sends back its updated (size-capped) session; we keep it + save it to GitHub.
+    child.on('message', (msg) => handleChildMessage(sessionId, msg));
 
-    // If the existing log is already oversized (e.g. left over from a
-    // crash loop before this fix), truncate it before appending more —
-    // otherwise every restart just keeps piling onto an already-huge file.
-    try {
-        if (fs.existsSync(logPath) && fs.statSync(logPath).size > MAX_LOG_SIZE) {
-            fs.writeFileSync(logPath, `[log truncated — exceeded ${MAX_LOG_SIZE / 1024 / 1024}MB]\n`);
-        }
-    } catch (_) {}
-
-    const logFile = fs.createWriteStream(logPath, { flags: 'a' });
     const logPrefix = `[bot:${sessionId.slice(0, 20)}]`;
-
-    // Also cap mid-write: if a single crash-loop burst blows past the
-    // limit between deploys, stop writing instead of growing forever.
-    let loggedBytes = 0;
-    const cappedWrite = (chunk) => {
-        loggedBytes += chunk.length;
-        if (loggedBytes > MAX_LOG_SIZE) return;
-        logFile.write(chunk);
-    };
-    child.stdout.on('data', cappedWrite);
-    child.stderr.on('data', cappedWrite);
-    child.stdout.on('data', d => process.stdout.write(`${logPrefix} ${d}`));
-    child.stderr.on('data', d => process.stderr.write(`${logPrefix} ${d}`));
+    child.stdout.on('data', d => { pushLog(sessionId, d); process.stdout.write(`${logPrefix} ${d}`); });
+    child.stderr.on('data', d => { pushLog(sessionId, d); process.stderr.write(`${logPrefix} ${d}`); });
 
     runningProcesses.set(sessionId, child);
 
@@ -144,6 +159,7 @@ function deployInstance({ sessionId, botConfig, spawn: shouldSpawn = true }) {
         crashCount: db[sessionId]?.crashCount || 0
     };
     saveDB(db);
+    githubSync.pushInstanceEntry(sessionId, db[sessionId]).catch(() => {});
 
     // If it stays up for 60s, treat it as healthy and clear the crash counter
     // so a bot that had trouble earlier isn't permanently capped.
@@ -226,23 +242,11 @@ function deployInstance({ sessionId, botConfig, spawn: shouldSpawn = true }) {
  *   instanceId: any unique folder-safe string (not a real lookup key)
  *   authDir: local folder containing creds.json etc. from the pairing socket
  */
-function deployInstanceFromPairing({ instanceId, authDir, botConfig, spawn: shouldSpawn = true }) {
-    const instanceDir = path.join(INSTANCES_DIR, instanceId);
-    const instanceSessionDir = path.join(instanceDir, 'session');
-
-    if (!fs.existsSync(instanceSessionDir)) fs.mkdirSync(instanceSessionDir, { recursive: true });
-
-    const bundle = {};
-    for (const file of fs.readdirSync(authDir)) {
-        const srcPath = path.join(authDir, file);
-        if (!fs.statSync(srcPath).isFile()) continue;
-        fs.copyFileSync(srcPath, path.join(instanceSessionDir, file));
-        bundle[file] = fs.readFileSync(srcPath).toString('base64');
-    }
-    githubSync.pushSessionFiles(instanceId, bundle).catch(() => {});
-
-    // deployInstance no longer copies anything into instanceDir besides
-    // config.env, so the session/ folder placed above is left untouched.
+function deployInstanceFromPairing({ instanceId, blob, fullBlob, botConfig, spawn: shouldSpawn = true }) {
+    // No session folder, no file copies: the session is just a small string.
+    sessionStore.set(instanceId, blob);          // memory + GitHub (one file)
+    sessionStore.pushNow(instanceId).catch(() => {});  // save to GitHub right away
+    sessionStore.setFullOnce(instanceId, fullBlob || blob); // child boots with the uncapped keys once
     return deployInstance({ sessionId: instanceId, botConfig, spawn: shouldSpawn });
 }
 
@@ -256,37 +260,36 @@ function deployInstanceFromPairing({ instanceId, authDir, botConfig, spawn: shou
  * through the normal, proven deployInstance path — same codebase copy,
  * same crash-respawn wiring, nothing new to trust here.
  */
-function restoreInstances() {
+async function restoreInstances() {
     const db = loadDB();
-    const toRestore = Object.values(db).filter(i => i.status === 'running' && !i.intentionalStop);
+    // 'pending' = registered earlier by the old Render->panel flow, never started. Start them now.
+    const toRestore = Object.values(db).filter(i =>
+        (i.status === 'running' || i.status === 'pending' || i.status === 'stopped') && !i.intentionalStop && (i.crashCount || 0) <= 5);
 
     if (!toRestore.length) {
         console.log('♻️  No instances to restore.');
         return;
     }
 
-    console.log(`♻️  Restoring ${toRestore.length} instance(s) from before restart...`);
+    console.log(`♻️  Restoring ${toRestore.length} instance(s)...`);
 
-    toRestore.forEach((instance, index) => {
-        setTimeout(() => {
-            try {
-                const fresh = loadDB();
-                if (fresh[instance.sessionId]) {
-                    fresh[instance.sessionId].status = 'stopped';
-                    saveDB(fresh);
-                }
-                console.log(`♻️  Restoring ${instance.sessionId} (${index + 1}/${toRestore.length})...`);
-                const result = deployInstance({ sessionId: instance.sessionId, botConfig: instance.botConfig });
-                if (!result.success) {
-                    console.log(`⚠️  Failed to restore ${instance.sessionId}: ${result.message}`);
-                }
-            } catch (e) {
-                // One bad instance (corrupted session, missing files, etc.)
-                // shouldn't stop the rest of the queue from restoring.
-                console.log(`❌ Failed to restore ${instance.sessionId} (threw): ${e.message}`);
-            }
-        }, index * 3000); // staggered so the server isn't spawning everything at once
-    });
+    let started = 0;
+    for (const instance of toRestore) {
+        try {
+            const blob = await sessionStore.ensure(instance.sessionId);
+            if (!blob) { console.log(`⚠️  ${instance.sessionId}: no session on GitHub — skipped.`); continue; }
+            sessionStore.setFullOnce(instance.sessionId, blob);
+            const fresh = loadDB();
+            if (fresh[instance.sessionId]) { fresh[instance.sessionId].status = 'stopped'; saveDB(fresh); }
+            const result = deployInstance({ sessionId: instance.sessionId, botConfig: instance.botConfig });
+            if (result.success) started++;
+            else console.log(`⚠️  Failed to restore ${instance.sessionId}: ${result.message}`);
+        } catch (e) {
+            console.log(`❌ Failed to restore ${instance.sessionId} (threw): ${e.message}`);
+        }
+        await new Promise(r => setTimeout(r, 2500)); // stagger so WhatsApp + RAM aren't hit at once
+    }
+    console.log(`♻️  Restore done — ${started} bot(s) started.`);
 }
 
 /**
@@ -312,6 +315,8 @@ function removeInstance(sessionId) {
 
     delete db[sessionId];
     saveDB(db);
+    sessionStore.remove(sessionId);
+    logBuffers.delete(sessionId);
 
     const instanceDir = path.join(INSTANCES_DIR, sessionId);
     try {
@@ -441,13 +446,18 @@ function stopInstance(sessionId) {
  * Gets the last N lines of an instance's log output — useful for a basic status view.
  */
 function getInstanceLogs(sessionId, lines = 50) {
-    const logPath = path.join(INSTANCES_DIR, sessionId, 'output.log');
-    if (!fs.existsSync(logPath)) return '';
-    const content = fs.readFileSync(logPath, 'utf-8');
-    return content.split('\n').slice(-lines).join('\n');
+    return (logBuffers.get(sessionId) || []).slice(-lines).join('\n');
+}
+
+/** Graceful shutdown (Render SIGTERM): stop bots so they flush sessions, then save everything. */
+async function shutdownAll() {
+    for (const child of runningProcesses.values()) { try { child.kill('SIGTERM'); } catch (_) {} }
+    await new Promise(r => setTimeout(r, 2000)); // let children send their final session over IPC
+    await sessionStore.flushAll();
 }
 
 module.exports = {
+    shutdownAll,
     deployInstance,
     deployInstanceFromPairing,
     restoreInstances,

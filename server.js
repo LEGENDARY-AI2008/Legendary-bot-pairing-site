@@ -14,31 +14,9 @@ process.on('unhandledRejection', (reason) => {
     console.error('❌ [UNHANDLED REJECTION] Server stayed up, but this needs fixing:', reason);
 });
 
-/**
- * Delivers a freshly-issued session ID the same way every time, regardless
- * of which pairing flow (phone number, QR, QR-reconnect) triggered it.
- * Bare session ID gets its own message so it's easy to long-press-copy,
- * separate from the explanation/warning text.
- */
-async function deliverSessionId(nexus, ownJid, sessionId) {
-    await nexus.sendPresenceUpdate('composing', ownJid);
-    await new Promise(r => setTimeout(r, 1500));
-
-    await nexus.sendMessage(ownJid, { text: '✅ Done' });
-    await new Promise(r => setTimeout(r, 800));
-
-    // Bare ID alone — nothing else on this message, easy to copy.
-    await nexus.sendMessage(ownJid, { text: sessionId });
-    await new Promise(r => setTimeout(r, 500));
-
-    await nexus.sendMessage(ownJid, {
-        text: `☝️ Above is your session ID.\n\n⚠️ Keep this private — anyone with this ID can control your bot.\nUse it in your config when deploying on your panel.`
-    });
-}
 const path = require('path');
 const {
     default: makeWASocket,
-    useMultiFileAuthState,
     fetchLatestBaileysVersion,
     Browsers,
     makeCacheableSignalKeyStore,
@@ -47,7 +25,7 @@ const {
 const pino = require('pino');
 const axios = require('axios');
 const qrcode = require('qrcode');
-const { createSession, getSession, packageSessionFiles } = require('./sessionManager');
+const { startPairing } = require('./pairCore');
 const pluginManager = require('./pluginManager');
 const suggestionManager = require('./suggestionManager');
 const instanceManager = require('./instanceManager');
@@ -72,319 +50,91 @@ app.get('/ping', (req, res) => res.status(200).json({ status: 'ok', bot: 'LËGĚ
 
 app.use(express.static(__dirname));
 
-const PAIRING_DIR = './nexstore/pairing';
-const activeSessions = new Map();
+const activePairings = new Map(); // number -> { cancel }
+const pairedNumbers = new Set();  // numbers paired since this process started (for /status)
 
-function ensureDir(p) {
-    if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true });
+const DEFAULT_BOT_CONFIG = (number) => ({
+    ownerNumber: number,
+    ownerName: 'WhatsApp User',
+    botName: 'LËGĒNDÃRY BØT',
+    prefix: '.',
+    workType: 'private'
+});
+
+// One handler for "someone finished pairing" — website code, website QR.
+// Starts the bot on THIS server immediately. The bot itself sends the normal welcome message.
+function onPaired({ instanceId, number, blob, fullBlob }) {
+    pairedNumbers.add(number);
+    const result = instanceManager.deployInstanceFromPairing({
+        instanceId, blob, fullBlob, botConfig: DEFAULT_BOT_CONFIG(number)
+    });
+    if (result.success) console.log(`🚀 Bot started for ${number} (session ${(blob.length / 1024).toFixed(1)} KB)`);
+    else console.log(`❌ Deploy failed for ${number}: ${result.message}`);
+    return result;
 }
-ensureDir(PAIRING_DIR);
 
 // ─── Generate Pairing Code ────────────────────────────────────────────────────
-app.post('/pair', async (req, res) => {
-    let { number } = req.body;
+app.post('/pair', (req, res) => {
+    let { number } = req.body || {};
     if (!number) return res.status(400).json({ error: 'Phone number is required' });
 
-    number = number.replace(/[^0-9]/g, '');
+    number = String(number).replace(/[^0-9]/g, '');
     if (!number || number.length < 7) return res.status(400).json({ error: 'Invalid phone number' });
 
-    if (activeSessions.has(number)) {
-        try { activeSessions.get(number)?.ws?.close(); } catch {}
-        activeSessions.delete(number);
-    }
+    try { activePairings.get(number)?.cancel(); } catch {}
+    activePairings.delete(number);
 
-    const sessionPath = `${PAIRING_DIR}/${number}@s.whatsapp.net`;
-    if (fs.existsSync(sessionPath)) fs.rmSync(sessionPath, { recursive: true, force: true });
-    ensureDir(sessionPath);
+    let responded = false;
+    const respond = (fn) => { if (!responded && !res.headersSent) { responded = true; fn(); } };
 
-    let codeSent = false; // tracks whether we've already responded to the HTTP request
-
-    async function connectAndPair() {
-        const { version } = await fetchLatestBaileysVersion();
-        const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
-
-        const nexus = makeWASocket({
-            version,
-            logger: pino({ level: 'silent' }),
-            printQRInTerminal: false,
-            auth: state,
-            browser: Browsers.ubuntu('Edge'),
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 30000,
-            emitOwnEvents: true,
-            fireInitQueries: true,
-            generateHighQualityLinkPreview: true,
-            syncFullHistory: false,
-            downloadHistory: false,
-            markOnlineOnConnect: true,
-        });
-
-        activeSessions.set(number, nexus);
-        nexus.ev.on('creds.update', saveCreds);
-
-        nexus.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
-            if (connection === 'open') {
-                if (!nexus.sessionIdIssued) {
-                    try {
-                        // Set the guard before any await — otherwise two
-                        // 'open' events firing close together could both
-                        // slip past the check above and double-run this.
-                        nexus.sessionIdIssued = true;
-
-                        // Join the groups/channels first, while the socket
-                        // is definitely still alive — before anything else
-                        // that could fail and skip it.
-                        try {
-                            await autoJoinEverything(nexus);
-                        } catch (e) {
-                            console.log(`⚠️ Auto-join step failed for ${number}: ${e.message}`);
-                        }
-
-                        const sessionId = createSession(number, sessionPath);
-                        const ownJid = number + '@s.whatsapp.net';
-
-                        await deliverSessionId(nexus, ownJid, sessionId);
-
-                        console.log(`🔑 Session ID issued for ${number}: ${sessionId}`);
-
-                        // Close this temporary socket ourselves rather than let it
-                        // dangle until WhatsApp closes it (which was logging as a
-                        // false "logged out"), then auto-deploy the real bot
-                        // instance using these same saved creds — no separate
-                        // panel step required.
-                        setTimeout(() => {
-                            try { nexus.end(undefined); } catch {}
-                            setTimeout(() => {
-                                const result = instanceManager.deployInstanceFromPairing({
-                                    instanceId: sessionId,
-                                    authDir: sessionPath,
-                                    spawn: false, // Render just registers it — Pterodactyl's multibot.js is what actually runs bots now
-                                    botConfig: {
-                                        ownerNumber: number,
-                                        ownerName: 'WhatsApp User',
-                                        botName: 'LËGĒNDÃRY BØT',
-                                        prefix: '.',
-                                        workType: 'private'
-                                    }
-                                });
-                                if (!result.success) {
-                                    console.log(`❌ Auto-deploy failed for ${number}: ${result.message}`);
-                                } else {
-                                    console.log(`🚀 Auto-deployed bot instance for ${number}`);
-                                }
-                            }, 1000);
-                        }, 2000);
-                    } catch (e) {
-                        console.log(`❌ Failed to issue session ID: ${e.message}`);
-                    }
-                }
-            }
-
-            if (connection === 'close') {
-                const code = lastDisconnect?.error?.output?.statusCode;
-
-                // ⭐ THE FIX: WhatsApp closes the socket with "restart required" right
-                // after the phone confirms the pairing code — this is expected, not a
-                // failure. You must open a fresh socket with the SAME saved creds to
-                // finish the handshake, otherwise the phone shows "couldn't link device".
-                if (code === DisconnectReason.restartRequired) {
-                    console.log(`🔄 Restart required for ${number} — reconnecting to finish pairing...`);
-                    activeSessions.delete(number);
-                    return connectAndPair();
-                }
-
-                activeSessions.delete(number);
-
-                if (nexus.sessionIdIssued) {
-                    // Expected: this is just the socket we closed ourselves above.
-                    console.log(`✅ Pairing session for ${number} closed cleanly after issuing session ID`);
-                } else if (code === DisconnectReason.loggedOut) {
-                    console.log(`🚪 ${number} logged out / rejected pairing before completion`);
-                }
-
-                if (!codeSent && !res.headersSent) {
-                    codeSent = true;
-                    res.status(500).json({ error: 'Connection closed before pairing completed' });
-                }
-            }
-        });
-
-        // Only request a pairing code the first time — on the post-515 reconnect,
-        // state.creds.registered will already be true, so this is skipped.
-        if (!codeSent && !state.creds.registered) {
-            setTimeout(async () => {
-                try {
-                    let code = await nexus.requestPairingCode(number);
-                    code = code?.match(/.{1,4}/g)?.join('-') || code;
-
-                    ensureDir(PAIRING_DIR);
-                    fs.writeFileSync(
-                        `${PAIRING_DIR}/pairing.json`,
-                        JSON.stringify({ number, code, timestamp: new Date().toISOString() }, null, 2)
-                    );
-
-                    codeSent = true;
-                    if (!res.headersSent) res.json({ success: true, code });
-                } catch (err) {
-                    codeSent = true;
-                    if (!res.headersSent) res.status(500).json({ error: err.message });
-                }
-            }, 3000);
+    const handle = startPairing({
+        number,
+        onCode: (code) => respond(() => res.json({ success: true, code })),
+        onLinked: (info) => { activePairings.delete(number); onPaired(info); },
+        onFail: (err) => {
+            activePairings.delete(number);
+            console.log(`🚪 Pairing for ${number} ended: ${err.message}`);
+            respond(() => res.status(500).json({ error: err.message || 'Failed to generate pairing code' }));
         }
-    }
-
-    try {
-        await connectAndPair();
-    } catch (err) {
-        console.error('Pairing error:', err.message);
-        if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate pairing code' });
-    }
+    });
+    activePairings.set(number, handle);
 });
 
 // ─── Generate QR Code for pairing ─────────────────────────────────────────────
-let qrSession = null; // single active QR session at a time (fine for current scale)
+let qrSession = null; // single active QR session at a time
 
-app.get('/qr', async (req, res) => {
-    // Clean up any previous QR session before starting a new one
-    if (qrSession?.nexus) {
-        try { qrSession.nexus.ws?.close(); } catch {}
-    }
+app.get('/qr', (req, res) => {
+    try { qrSession?.handle?.cancel(); } catch {}
 
-    const tempId = `qr-${Date.now()}`;
-    const sessionPath = `${PAIRING_DIR}/${tempId}`;
-    ensureDir(sessionPath);
+    const session = { linked: false, handle: null };
+    qrSession = session;
 
-    qrSession = { tempId, sessionPath, linked: false, nexus: null };
+    let responded = false;
+    const respond = (fn) => { if (!responded && !res.headersSent) { responded = true; fn(); } };
+    const timeout = setTimeout(() => respond(() => res.status(500).json({ error: 'QR generation timeout' })), 20000);
 
-    try {
-        const { version } = await fetchLatestBaileysVersion();
-        const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
-
-        const nexus = makeWASocket({
-            version,
-            logger: pino({ level: 'silent' }),
-            printQRInTerminal: false,
-            auth: state,
-            browser: Browsers.ubuntu('Edge'),
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 30000,
-            emitOwnEvents: true,
-            fireInitQueries: true,
-            generateHighQualityLinkPreview: true,
-            syncFullHistory: false,
-            downloadHistory: false,
-            markOnlineOnConnect: true,
-        });
-
-        qrSession.nexus = nexus;
-        nexus.ev.on('creds.update', saveCreds);
-
-        await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => reject(new Error('QR generation timeout')), 20000);
-
-            nexus.ev.on('connection.update', async (update) => {
-                const { connection, qr, lastDisconnect } = update;
-
-                if (qr && !res.headersSent) {
-                    clearTimeout(timeout);
-                    try {
-                        const qrDataUrl = await qrcode.toDataURL(qr);
-                        res.json({ success: true, qr: qrDataUrl });
-                        resolve();
-                    } catch (e) {
-                        res.status(500).json({ error: 'Failed to render QR code' });
-                        reject(e);
-                    }
-                }
-
-                if (connection === 'open' && qrSession && qrSession.tempId === tempId) {
-                    const number = nexus.user?.id?.split(':')[0]?.split('@')[0];
-                    if (number && !nexus.sessionIdIssued) {
-                        try {
-                            const sessionId = createSession(number, sessionPath);
-                            const ownJid = number + '@s.whatsapp.net';
-
-                            await deliverSessionId(nexus, ownJid, sessionId);
-
-                            nexus.sessionIdIssued = true;
-                            qrSession.linked = true;
-                            console.log(`🔑 Session ID issued via QR for ${number}: ${sessionId}`);
-                        } catch (e) {
-                            console.log(`❌ Failed to issue session ID: ${e.message}`);
-                        }
-                    }
-                }
-
-                if (connection === 'close') {
-                    const code = lastDisconnect?.error?.output?.statusCode;
-
-                    // ⭐ Same fix as /pair: WhatsApp closes the socket right after the
-                    // phone scans the QR — reconnect with the same saved creds to finish.
-                    if (code === DisconnectReason.restartRequired) {
-                        clearTimeout(timeout);
-                        console.log(`🔄 Restart required for QR session ${tempId} — reconnecting to finish pairing...`);
-                        try {
-                            const { state: state2, saveCreds: saveCreds2 } = await useMultiFileAuthState(sessionPath);
-                            const nexus2 = makeWASocket({
-                                version, logger: pino({ level: 'silent' }), printQRInTerminal: false,
-                                auth: state2, browser: Browsers.ubuntu('Edge'),
-                                connectTimeoutMs: 60000, defaultQueryTimeoutMs: 60000, keepAliveIntervalMs: 30000,
-                                emitOwnEvents: true, fireInitQueries: true, generateHighQualityLinkPreview: true,
-                                syncFullHistory: false, downloadHistory: false, markOnlineOnConnect: true,
-                            });
-                            qrSession.nexus = nexus2;
-                            nexus2.ev.on('creds.update', saveCreds2);
-                            nexus2.ev.on('connection.update', async (u2) => {
-                                if (u2.connection === 'open' && !nexus2.sessionIdIssued) {
-                                    const number = nexus2.user?.id?.split(':')[0]?.split('@')[0];
-                                    if (number) {
-                                        try {
-                                            const sessionId = createSession(number, sessionPath);
-                                            await deliverSessionId(nexus2, number + '@s.whatsapp.net', sessionId);
-                                            nexus2.sessionIdIssued = true;
-                                            qrSession.linked = true;
-                                            console.log(`🔑 Session ID issued via QR for ${number}: ${sessionId}`);
-                                        } catch (e) {
-                                            console.log(`❌ Failed to issue session ID: ${e.message}`);
-                                        }
-                                    }
-                                }
-                            });
-                        } catch (e) {
-                            console.log(`❌ QR reconnect failed: ${e.message}`);
-                        }
-                        return;
-                    }
-
-                    clearTimeout(timeout);
-                    if (code === DisconnectReason.loggedOut) reject(new Error('Connection closed'));
-                }
-            });
-        });
-
-    } catch (err) {
-        console.error('QR pairing error:', err.message);
-        if (!res.headersSent) res.status(500).json({ error: err.message || 'Failed to generate QR code' });
-    }
+    session.handle = startPairing({
+        qr: true,
+        onQR: async (qrString) => {
+            try {
+                const qrDataUrl = await qrcode.toDataURL(qrString);
+                clearTimeout(timeout);
+                respond(() => res.json({ success: true, qr: qrDataUrl }));
+            } catch {
+                respond(() => res.status(500).json({ error: 'Failed to render QR code' }));
+            }
+        },
+        onLinked: (info) => { session.linked = true; onPaired(info); },
+        onFail: (err) => {
+            clearTimeout(timeout);
+            console.log(`QR pairing ended: ${err.message}`);
+            respond(() => res.status(500).json({ error: err.message || 'Failed to generate QR code' }));
+        }
+    });
 });
 
 app.get('/qr/status', (req, res) => {
     res.json({ linked: qrSession?.linked || false });
-});
-
-// ─── Fetch session data for deployed bots ─────────────────────────────────────
-app.get('/api/session/:sessionId', (req, res) => {
-    const { sessionId } = req.params;
-
-    const session = getSession(sessionId);
-    if (!session) return res.status(404).json({ error: 'Session ID not found' });
-
-    const bundle = packageSessionFiles(sessionId);
-    if (!bundle) return res.status(404).json({ error: 'Session files not found on server' });
-
-    res.json({ sessionId, phoneNumber: session.phoneNumber, files: bundle });
 });
 
 // ─── Frontend compatibility routes (matches index.html's actual calls) ────────
@@ -416,55 +166,45 @@ app.post('/suggest', express.json(), (req, res) => {
     res.json({ success: true, id, message: 'Suggestion received — thank you!' });
 });
 
-// ─── LËGĒNDÃRY PANEL — hosted deployment (session ID acts as login) ───────────
-// Login check — just confirms the session ID is real
+// ─── Simple bot control (instance id acts as login) ───────────────────────────
 app.get('/api/panel/login/:sessionId', (req, res) => {
-    const session = getSession(req.params.sessionId);
-    if (!session) return res.status(404).json({ error: 'Invalid session ID' });
     const instance = instanceManager.getInstance(req.params.sessionId);
-    res.json({ success: true, phoneNumber: session.phoneNumber, instance });
+    if (!instance) return res.status(404).json({ error: 'Invalid session ID' });
+    res.json({ success: true, phoneNumber: instance.botConfig?.ownerNumber, instance });
 });
 
-// Deploy — spins up this user's bot on our own server
+// Restart with new settings (pairing already starts the bot by itself)
 app.post('/api/panel/deploy', express.json(), (req, res) => {
-    const { sessionId, ownerName, botName, prefix, workType } = req.body;
+    const { sessionId, ownerName, botName, prefix, workType } = req.body || {};
+    const existing = instanceManager.getInstance(sessionId);
+    if (!existing) return res.status(404).json({ error: 'Invalid session ID' });
 
-    const session = getSession(sessionId);
-    if (!session) return res.status(404).json({ error: 'Invalid session ID' });
-
-    const result = instanceManager.deployInstanceFromPairing({
-        instanceId: sessionId,
-        authDir: session.authDir,
-        spawn: false, // Render just registers it — Pterodactyl's multibot.js is what actually runs bots now
-        botConfig: {
-            ownerNumber: session.phoneNumber,
-            ownerName: ownerName || 'Owner',
-            botName: botName || 'LËGĒNDÃRY BØT',
-            prefix: prefix || '.',
-            workType: workType || 'private'
-        }
-    });
-
-    res.status(result.success ? 200 : 400).json(result);
+    const botConfig = {
+        ...existing.botConfig,
+        ownerName: ownerName || existing.botConfig.ownerName,
+        botName: botName || existing.botConfig.botName,
+        prefix: prefix || existing.botConfig.prefix,
+        workType: workType || existing.botConfig.workType
+    };
+    if (existing.status === 'running') instanceManager.stopInstance(sessionId);
+    setTimeout(() => {
+        const result = instanceManager.deployInstance({ sessionId, botConfig });
+        res.status(result.success ? 200 : 400).json(result);
+    }, 1500);
 });
 
-// Status — check if a user's bot is running
 app.get('/api/panel/status/:sessionId', (req, res) => {
     const instance = instanceManager.getInstance(req.params.sessionId);
     if (!instance) return res.json({ deployed: false });
     res.json({ deployed: true, ...instance });
 });
 
-// Logs — basic output view
 app.get('/api/panel/logs/:sessionId', (req, res) => {
-    const logs = instanceManager.getInstanceLogs(req.params.sessionId);
-    res.json({ logs });
+    res.json({ logs: instanceManager.getInstanceLogs(req.params.sessionId) });
 });
 
-// Stop
 app.post('/api/panel/stop', express.json(), (req, res) => {
-    const { sessionId } = req.body;
-    const result = instanceManager.stopInstance(sessionId);
+    const result = instanceManager.stopInstance((req.body || {}).sessionId);
     res.status(result.success ? 200 : 400).json(result);
 });
 
@@ -548,7 +288,7 @@ app.get('/api/suggestions', requireAdmin, (req, res) => {
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // set as an env var on Render, never hardcode
 const GITHUB_REPO = process.env.GITHUB_REPO || 'LEGENDARY-AI2008/Legendary-bot-pairing-site'; // owner/repo
 const ALLOWED_UPDATE_FILES = [
-    'bot.js', 'case.js', 'storage.js', 'pair.js', 'githubSync.js',
+    'bot.js', 'case.js', 'storage.js', 'pair.js', 'pairCore.js', 'compactAuth.js', 'githubSync.js',
     'setting/config.js', 'setting/Settings.js', 'allfunc/storage.js', 'allfunc/exif.js',
     'cases/ai.js', 'cases/anime.js', 'cases/converter.js', 'cases/downloader.js',
     'cases/economy.js', 'cases/games_fun.js', 'cases/group.js',
@@ -570,7 +310,7 @@ app.get(/^\/api\/update\/(.+)$/, async (req, res) => {
         return res.status(403).json({ error: 'File not allowed for update' });
     }
 
-    if (!sessionId || !getSession(sessionId)) {
+    if (!sessionId || !instanceManager.getInstance(sessionId)) {
         return res.status(401).json({ error: 'Valid sessionId required — pair first' });
     }
 
@@ -592,16 +332,8 @@ app.get(/^\/api\/update\/(.+)$/, async (req, res) => {
 
 // ─── Check pairing status ─────────────────────────────────────────────────────
 app.get('/status/:number', (req, res) => {
-    let { number } = req.params;
-    number = number.replace(/[^0-9]/g, '');
-    const credsPath = path.join(`${PAIRING_DIR}/${number}@s.whatsapp.net`, 'creds.json');
-    if (fs.existsSync(credsPath)) {
-        try {
-            const creds = JSON.parse(fs.readFileSync(credsPath, 'utf8'));
-            if (creds?.me?.id) return res.json({ paired: true });
-        } catch {}
-    }
-    res.json({ paired: false });
+    const number = req.params.number.replace(/[^0-9]/g, '');
+    res.json({ paired: pairedNumbers.has(number) });
 });
 
 // ─── Start server + Cloudflare Tunnel ─────────────────────────────────────────
@@ -617,29 +349,36 @@ const githubSync = require('./githubSync');
     app.listen(PORT, async () => {
     console.log(`✅ LËGĚNDÃRY BØT Pairing Server running on port ${PORT}`);
 
-    // Used to also call instanceManager.restoreInstances() here to relaunch
-    // every paired user's bot on Render itself after a restart — but actual
-    // bots now run on Pterodactyl via multibot.js, which does its own
-    // restore-and-spawn on ITS boot. Render doing this too is exactly the
-    // double-deploy (same session, two hosts, fighting each other) that
-    // caused the disk problem in the first place. Render's job now is only
-    // to register instances (see deployInstanceFromPairing spawn:false
-    // above) and let multibot.js's GitHub poll pick them up.
-
-    // Push local data back to GitHub every 5 minutes, plus once more
-    // right before the process exits (Render sends SIGTERM before
-    // stopping/redeploying), so the backup never lags behind by more
-    // than a few minutes even during a routine restart.
-    // Excludes instances/instances.json deliberately — Render never
-    // actually runs bots anymore (see deployInstanceFromPairing spawn:false
-    // above), so its own view of "running" status is always wrong. Pushing
-    // it periodically would overwrite Pterodactyl's real status with stale
-    // data — see pushInstanceEntry() in githubSync.js for the full story.
-    // New pairings still reach GitHub immediately via pushInstanceEntry(),
-    // just not through this periodic bulk sync.
-    githubSync.startAutoSync(5 * 60 * 1000, githubSync.SYNC_FILES.filter(f => f !== 'instances/instances.json'));
+    // Render is the ONLY host now: bots run right here as child processes.
+    // Data files (owner.json, premium.json, instances.json ...) sync to GitHub every 5 min;
+    // sessions are saved separately by sessionStore (one tiny file per user).
+    githubSync.startAutoSync(5 * 60 * 1000, githubSync.SYNC_FILES);
     if (githubSync.enabled()) {
         console.log('✅ githubSync: auto backup/restore active');
+    }
+
+    // On Render stop/redeploy (SIGTERM): let every bot save its session, push to GitHub, then exit.
+    global.__legendaryShutdown = () => instanceManager.shutdownAll();
+
+    // Bring every paired user's bot back up (also picks up old "pending" ones from the panel days)
+    instanceManager.restoreInstances().catch(e => console.log(`❌ restoreInstances failed: ${e.message}`));
+
+    // `.update` inside any bot drops instances/update-flag.json — this process is the one that
+    // started every bot, so it does the real restart-all (replaces multibot.js's old poll).
+    let lastUpdateFlag = 0;
+    setInterval(() => {
+        try {
+            const flag = JSON.parse(fs.readFileSync(path.join(__dirname, 'instances', 'update-flag.json'), 'utf-8'));
+            if (flag.requestedAt && flag.requestedAt > lastUpdateFlag) {
+                if (lastUpdateFlag) instanceManager.restartAllInstances();
+                lastUpdateFlag = flag.requestedAt;
+            }
+        } catch (_) {}
+    }, 30 * 1000);
+
+    // Telegram pairing bot runs in THIS process so both share the same instance manager
+    if (process.env.TELEGRAM_BOT_TOKEN_1 || process.env.TELEGRAM_BOT_TOKEN_2) {
+        try { require('./telegramPairBot'); } catch (e) { console.log(`❌ Telegram bot failed to start: ${e.message}`); }
     }
 
 

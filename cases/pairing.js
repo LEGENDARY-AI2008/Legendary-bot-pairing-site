@@ -28,64 +28,23 @@ case 'pair': {
         console.log('WhatsApp check error:', e);
     }
 
-    // Create pairing directory if it doesn't exist
-    const WHATSAPP_PAIRING_DIR = './database/pairing/';
-    if (!fs.existsSync(WHATSAPP_PAIRING_DIR)) {
-        fs.mkdirSync(WHATSAPP_PAIRING_DIR, { recursive: true });
-    }
-
     // Send processing message
     const processingMsg = await devtrust.sendMessage(m.chat, {
         text: `🔗 *Generating pairing code for +${cleanNumber}*\n⏳ Please wait...`
     }, { quoted: m });
 
     try {
-        // Load the pair module (same as Telegram bot)
-        const startPairing = require('./pair');
+        // pair.js now returns the code directly — no pairing.json, no folders
+        const startPairing = require('../pair');
         const jid = cleanNumber + '@s.whatsapp.net';
-        
-        // Start pairing (this will generate code and save to file)
-        await startPairing(jid);
-        
-        // Wait 4 seconds (same as Telegram bot)
-        await sleep(4000);
+        const pairingCode = await startPairing(jid);
 
-        // Read the pairing file (same as Telegram bot)
-        const pairingFile = path.join(__dirname, 'nexstore', 'pairing', 'pairing.json');
-        
-        if (!fs.existsSync(pairingFile)) {
-            throw new Error('Pairing file not found');
-        }
-        
-        const cu = fs.readFileSync(pairingFile, 'utf-8');
-        const cuObj = JSON.parse(cu);
-        const pairingCode = cuObj.code;
+        if (!pairingCode) throw new Error('No code received');
 
-        if (!pairingCode) {
-            throw new Error('No code found in pairing file');
-        }
-
-        // Format the code nicely
         let formattedCode = pairingCode;
         if (!pairingCode.includes('-') && pairingCode.length > 4) {
             formattedCode = pairingCode.match(/.{1,4}/g).join('-');
         }
-
-        // Save pairing data to WhatsApp directory
-        const pairingData = {
-            jid: jid,
-            number: cleanNumber,
-            code: pairingCode,
-            timestamp: Date.now(),
-            date: new Date().toISOString(),
-            status: 'pending',
-            pairedBy: m.sender
-        };
-        
-        fs.writeFileSync(
-            path.join(WHATSAPP_PAIRING_DIR, `${cleanNumber}@s.whatsapp.net.json`), 
-            JSON.stringify(pairingData, null, 2)
-        );
 
         // Delete processing message
         await devtrust.sendMessage(m.chat, { delete: processingMsg.key });

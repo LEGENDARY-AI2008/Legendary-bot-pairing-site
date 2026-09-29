@@ -192,6 +192,7 @@ function startAutoSync(intervalMs = 5 * 60 * 1000, files = SYNC_FILES) {
         shuttingDown = true;
         console.log(`🛑 githubSync: ${signal} received — flushing final backup before exit...`);
         try { await backupToGitHub(files); } catch {}
+        try { if (typeof global.__legendaryShutdown === 'function') await global.__legendaryShutdown(); } catch {}
         process.exit(0);
     };
     process.on('SIGTERM', () => flushAndExit('SIGTERM'));
@@ -233,6 +234,26 @@ async function fetchSessionFiles(sessionId) {
     const remote = await getRemoteFile(repoPath);
     if (!remote || !remote.content) return null;
     return JSON.parse(Buffer.from(remote.content, 'base64').toString('utf-8'));
+}
+
+/**
+ * Compact session storage: one small text blob per paired user,
+ * sessions/<sessionId>.json (content is the "L2." blob, or an old
+ * multi-file JSON bundle from before the compact format).
+ */
+async function pushSessionText(sessionId, text) {
+    if (!enabled()) return false;
+    const repoPath = `sessions/${sessionId}.json`;
+    const remote = await getRemoteFile(repoPath);
+    await putRemoteFile(repoPath, text, remote?.sha);
+    return true;
+}
+
+async function fetchSessionText(sessionId) {
+    if (!enabled()) return null;
+    const remote = await getRemoteFile(`sessions/${sessionId}.json`);
+    if (!remote || !remote.content) return null;
+    return Buffer.from(remote.content, 'base64').toString('utf-8');
 }
 
 /**
@@ -295,4 +316,4 @@ async function deleteInstanceEntry(sessionId) {
     }
 }
 
-module.exports = { restoreFromGitHub, backupToGitHub, startAutoSync, SYNC_FILES, enabled, pushSessionFiles, fetchSessionFiles, pushInstanceEntry, deleteSessionFiles, deleteInstanceEntry };
+module.exports = { restoreFromGitHub, backupToGitHub, startAutoSync, SYNC_FILES, enabled, pushSessionText, fetchSessionText, pushSessionFiles, fetchSessionFiles, pushInstanceEntry, deleteSessionFiles, deleteInstanceEntry };

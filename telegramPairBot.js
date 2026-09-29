@@ -11,22 +11,12 @@ require('dotenv').config();
 const { Telegraf, Markup, session } = require('telegraf');
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
-const pino = require('pino');
-const {
-    default: makeWASocket,
-    useMultiFileAuthState,
-    fetchLatestBaileysVersion,
-    DisconnectReason,
-    Browsers
-} = require('@boruto_vk7/baileys');
+const { startPairing } = require('./pairCore');
 
 const { deployInstanceFromPairing, restoreInstances, getInstance, stopInstance, getInstanceLogs } = require('./instanceManager');
 const forceJoin = require('./forceJoin');
 const pairedUsers = require('./pairedUsers');
 
-const PAIRING_DIR = path.join(__dirname, 'sessions', 'pairing');
-function ensureDir(p) { if (!fs.existsSync(p)) fs.mkdirSync(p, { recursive: true }); }
 
 // ===== OWNER NOTIFICATIONS =====
 // Reuses the same ADMIN_TELEGRAM_IDS env var the /admin commands use
@@ -72,146 +62,75 @@ async function getTelegramProfilePhoto(telegram, userId) {
 const { autoJoinEverything } = require('./autoJoin');
 
 /**
- * Pairs a number, and the moment the connection opens, hands the local
- * auth folder straight to deployInstanceFromPairing — no session ID
- * shown, no manual step, immediate.
+ * Pairs a number. The session is kept in memory (tiny, compressed) — the
+ * moment the phone confirms, the bot starts on this same host and sends the
+ * normal welcome message. No folders, no session files.
  */
 async function pairAndDeploy(ctx, number, botConfig) {
-    const instanceId = 'pair-' + crypto.randomBytes(6).toString('hex');
-    const sessionPath = path.join(PAIRING_DIR, instanceId);
-    ensureDir(sessionPath);
-
-    let codeSent = false;
+    let waProfilePic = null;
     let deployed = false;
-    let closingIntentionally = false; // true only for our own nexus.end() right after a successful deploy
 
-    async function connectAndPair() {
-        const { version } = await fetchLatestBaileysVersion();
-        const { state, saveCreds } = await useMultiFileAuthState(sessionPath);
+    startPairing({
+        number,
 
-        const nexus = makeWASocket({
-            version,
-            logger: pino({ level: 'silent' }),
-            printQRInTerminal: false,
-            auth: state,
-            browser: Browsers.ubuntu('Edge'),
-            connectTimeoutMs: 60000,
-            defaultQueryTimeoutMs: 60000,
-            keepAliveIntervalMs: 30000,
-            emitOwnEvents: true,
-            fireInitQueries: true,
-            generateHighQualityLinkPreview: true,
-            syncFullHistory: false,
-            downloadHistory: false,
-            markOnlineOnConnect: true,
-        });
+        onCode: async (code) => {
+            await ctx.replyWithMarkdown(
+                `🔢 *Your pairing code:* \`${code}\`\n\n` +
+                `On your phone: WhatsApp → Linked Devices → Link a Device → Link with phone number instead → enter this code.\n\n` +
+                `_Code expires in a couple minutes — your bot goes live automatically the moment it connects._`
+            ).catch(() => {});
+        },
 
-        nexus.ev.on('creds.update', saveCreds);
+        onOpen: async (sock) => {
+            await ctx.reply('🔗 Connected! Joining our groups/channels and deploying your bot...').catch(() => {});
+            // profile pic is only reachable while this socket is alive
+            waProfilePic = await sock.profilePictureUrl(number + '@s.whatsapp.net', 'image').catch(() => null);
+        },
 
-        nexus.ev.on('connection.update', async ({ connection, lastDisconnect }) => {
-            if (connection === 'open' && !deployed) {
-                deployed = true;
-                try {
-                    await ctx.reply('🔗 Connected! Joining our groups/channels and deploying your bot...');
-                    await autoJoinEverything(nexus);
+        onLinked: async ({ instanceId, blob, fullBlob }) => {
+            deployed = true;
+            try {
+                const result = deployInstanceFromPairing({ instanceId, blob, fullBlob, botConfig });
 
-                    // Fetch the WhatsApp profile pic before we close this
-                    // socket — it's the only window we have access to it.
-                    const ownJid = number + '@s.whatsapp.net';
-                    const waProfilePic = await nexus.profilePictureUrl(ownJid, 'image').catch(() => null);
-
-                    // Close this pairing socket BEFORE spawning the real
-                    // instance — Baileys only allows one active connection
-                    // per session at a time, so the deployed process needs
-                    // this one out of the way first to take over cleanly.
-                    closingIntentionally = true;
-                    try { nexus.end(undefined); } catch {}
-                    await new Promise(r => setTimeout(r, 1000));
-
-                    const result = deployInstanceFromPairing({ instanceId, authDir: sessionPath, spawn: false, botConfig });
-
-                    if (result.success) {
-                        pairedUsers.recordPairing(ctx.from.id, { instanceId, number, username: ctx.from.username || ctx.from.first_name });
-                        await ctx.replyWithMarkdown(
-                            `✅ *Pairing successful!*\n\n` +
-                            `Your bot is starting up now on the server — should be live within a minute.\n\n` +
-                            forceJoin.supportMessage()
-                        );
-                        await notifyOwners(
-                            ctx.telegram,
-                            `✅ *Paired*\n\n` +
-                            `Number: \`${number}\`\n` +
-                            `Username: @${ctx.from.username || '(none)'} (${ctx.from.first_name || ''})\n` +
-                            `Telegram ID: \`${ctx.from.id}\`\n` +
-                            `Instance: \`${instanceId}\``,
-                            waProfilePic
-                        );
-                    } else {
-                        await ctx.replyWithMarkdown(`❌ *Pairing worked, but deploy failed:* ${result.message}\n\nTry /pair again in a moment.`);
-                        await notifyOwners(
-                            ctx.telegram,
-                            `⚠️ *Paired but deploy failed*\n\nNumber: \`${number}\`\nUsername: @${ctx.from.username || '(none)'}\nReason: ${result.message}`
-                        );
-                    }
-                } catch (e) {
-                    console.log(`❌ Failed to deploy for ${number}: ${e.message}`);
-                    await ctx.reply(`❌ Something went wrong deploying your bot: ${e.message}`);
-                }
-            }
-
-            if (connection === 'close') {
-                const code = lastDisconnect?.error?.output?.statusCode;
-
-                // WhatsApp closes with "restart required" right after the
-                // phone confirms the code — reconnect with the same saved
-                // creds to finish, don't treat it as a failure.
-                if (code === DisconnectReason.restartRequired && !deployed) {
-                    console.log(`🔄 Restart required for ${number} — reconnecting to finish pairing...`);
-                    return connectAndPair();
-                }
-
-                if (!closingIntentionally) {
-                    const reason = code === DisconnectReason.loggedOut
-                        ? 'logged out / rejected the code'
-                        : `connection closed (code ${code || 'unknown'})`;
-
-                    if (!deployed && code === DisconnectReason.loggedOut) {
-                        await ctx.reply('🚪 Pairing was rejected or the code expired — send /pair to try again.');
-                    }
-
+                if (result.success) {
+                    pairedUsers.recordPairing(ctx.from.id, { instanceId, number, username: ctx.from.username || ctx.from.first_name });
+                    await ctx.replyWithMarkdown(
+                        `✅ *Pairing successful!*\n\n` +
+                        `Your bot is starting right now — check your WhatsApp, the welcome message lands in a few seconds.\n\n` +
+                        forceJoin.supportMessage()
+                    );
                     await notifyOwners(
                         ctx.telegram,
-                        `🔴 *Connection stopped*\n\n` +
+                        `✅ *Paired*\n\n` +
                         `Number: \`${number}\`\n` +
                         `Username: @${ctx.from.username || '(none)'} (${ctx.from.first_name || ''})\n` +
                         `Telegram ID: \`${ctx.from.id}\`\n` +
-                        `Stage: ${deployed ? 'was already deployed' : 'during pairing'}\n` +
-                        `Reason: ${reason}`
+                        `Instance: \`${instanceId}\`\n` +
+                        `Session size: ${(blob.length / 1024).toFixed(1)} KB`,
+                        waProfilePic
+                    );
+                } else {
+                    await ctx.replyWithMarkdown(`❌ *Pairing worked, but deploy failed:* ${result.message}\n\nTry /pair again in a moment.`);
+                    await notifyOwners(
+                        ctx.telegram,
+                        `⚠️ *Paired but deploy failed*\n\nNumber: \`${number}\`\nUsername: @${ctx.from.username || '(none)'}\nReason: ${result.message}`
                     );
                 }
+            } catch (e) {
+                console.log(`❌ Failed to deploy for ${number}: ${e.message}`);
+                await ctx.reply(`❌ Something went wrong deploying your bot: ${e.message}`).catch(() => {});
             }
-        });
+        },
 
-        if (!codeSent && !state.creds.registered) {
-            setTimeout(async () => {
-                try {
-                    let code = await nexus.requestPairingCode(number);
-                    code = code?.match(/.{1,4}/g)?.join('-') || code;
-                    codeSent = true;
-                    await ctx.replyWithMarkdown(
-                        `🔢 *Your pairing code:* \`${code}\`\n\n` +
-                        `On your phone: WhatsApp → Linked Devices → Link a Device → Link with phone number instead → enter this code.\n\n` +
-                        `_Code expires in a couple minutes — your bot goes live automatically the moment it connects._`
-                    );
-                } catch (err) {
-                    codeSent = true;
-                    await ctx.reply(`❌ Couldn't generate a pairing code: ${err.message}`);
-                }
-            }, 3000);
+        onFail: async (err) => {
+            if (deployed) return;
+            await ctx.reply(`❌ Pairing failed: ${err.message}\nSend /pair to try again.`).catch(() => {});
+            await notifyOwners(
+                ctx.telegram,
+                `🔴 *Pairing failed*\n\nNumber: \`${number}\`\nUsername: @${ctx.from.username || '(none)'} (${ctx.from.first_name || ''})\nTelegram ID: \`${ctx.from.id}\`\nReason: ${err.message}`
+            ).catch(() => {});
         }
-    }
-
-    await connectAndPair();
+    });
 }
 
 // ============================================================
@@ -463,11 +382,5 @@ process.on('unhandledRejection', (err) => {
     console.log(`⚠️ Unhandled rejection (bot kept running): ${err && err.message ? err.message : err}`);
 });
 
-// Actual bot instances now run on Pterodactyl via multibot.js, not here on
-// Render. The Telegram bot's only job is to register pairings (spawn: false)
-// and let multibot.js's GitHub poll pick them up. So no restoreInstances()
-// call needed — that would spawn bots locally, creating the double-deploy we
-// fixed everywhere else.
-
-process.once('SIGINT', () => process.exit(0));
-process.once('SIGTERM', () => process.exit(0));
+// Bots now run right here on Render (see instanceManager.js) — server.js calls
+// restoreInstances() on boot, so nothing else to do at this point.
