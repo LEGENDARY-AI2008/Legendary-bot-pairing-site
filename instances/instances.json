@@ -373,5 +373,35 @@
     },
     "intentionalStop": false,
     "crashCount": 0
+  },
+  "r9d89a24b051a87": {
+    "sessionId": "r9d89a24b051a87",
+    "pid": 64,
+    "status": "running",
+    "deployedAt": "2026-09-29T07:20:34.974Z",
+    "botConfig": {
+      "ownerNumber": "2349068182160",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
+  },
+  "r2fa627ba92f66c": {
+    "sessionId": "r2fa627ba92f66c",
+    "pid": 64,
+    "status": "running",
+    "deployedAt": "2026-09-29T07:20:47.040Z",
+    "botConfig": {
+      "ownerNumber": "2348137419241",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
   }
 }
