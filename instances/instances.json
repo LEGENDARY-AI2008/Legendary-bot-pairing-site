@@ -376,9 +376,9 @@
   },
   "rdee2e90827fb13": {
     "sessionId": "rdee2e90827fb13",
-    "pid": 124,
-    "status": "stopped",
-    "deployedAt": "2026-09-29T06:52:46.115Z",
+    "pid": 136,
+    "status": "running",
+    "deployedAt": "2026-09-29T06:57:09.813Z",
     "botConfig": {
       "ownerNumber": "2348063788754",
       "ownerName": "WhatsApp User",
@@ -387,7 +387,6 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 1,
-    "exitCode": null
+    "crashCount": 0
   }
 }
