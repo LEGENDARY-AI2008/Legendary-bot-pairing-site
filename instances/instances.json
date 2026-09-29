@@ -328,5 +328,20 @@
     },
     "intentionalStop": false,
     "crashCount": 0
+  },
+  "rc906dcc13b3254": {
+    "sessionId": "rc906dcc13b3254",
+    "pid": 107,
+    "status": "running",
+    "deployedAt": "2026-09-29T06:03:34.941Z",
+    "botConfig": {
+      "ownerNumber": "2348137419241",
+      "ownerName": "WhatsApp User",
+      "botName": "LËGĒNDÃRY BØT",
+      "prefix": ".",
+      "workType": "private"
+    },
+    "intentionalStop": false,
+    "crashCount": 0
   }
 }
