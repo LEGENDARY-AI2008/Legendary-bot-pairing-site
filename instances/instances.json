@@ -316,8 +316,9 @@
   },
   "pair-ef051ec32df8": {
     "sessionId": "pair-ef051ec32df8",
-    "status": "pending",
-    "registeredAt": "2026-09-29T04:56:12.413Z",
+    "pid": 19443,
+    "status": "running",
+    "deployedAt": "2026-09-29T04:58:09.724Z",
     "botConfig": {
       "ownerNumber": "2349012463035",
       "ownerName": "Martinez",
@@ -326,6 +327,6 @@
       "workType": "private"
     },
     "intentionalStop": false,
-    "crashCount": 0
+    "crashCount": 1
   }
 }
