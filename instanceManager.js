@@ -3,6 +3,12 @@ const path = require('path');
 const { spawn } = require('child_process');
 const githubSync = require('./githubSync');
 const sessionStore = require('./sessionStore');
+const sessionHost = require('./sessionHost');
+const pairedUsers = require('./pairedUsers');
+
+// IN_PROCESS=1 (default): every bot session runs inside THIS process via sessionHost.js
+// (cheap: ~30-40MB each). IN_PROCESS=0 falls back to the old one-process-per-bot mode.
+const IN_PROCESS = process.env.IN_PROCESS !== '0';
 
 const DB_FILE = path.join(__dirname, 'instances', 'instances.json');
 const INSTANCES_DIR = path.join(__dirname, 'instances');
@@ -79,6 +85,18 @@ function deployInstance({ sessionId, botConfig, spawn: shouldSpawn = true }) {
         return { success: false, message: 'Server is at capacity right now. Please try again later.' };
     }
 
+    // Memory guard: refuse to start another bot while the server is close to its RAM limit,
+    // so Render never OOM-kills everything. Override with RSS_LIMIT_MB in Render env.
+    if (IN_PROCESS && shouldSpawn) {
+        const limitMB = sessionHost.memoryLimitMB() || 512;
+        const ceilingMB = parseInt(process.env.RSS_LIMIT_MB || '0', 10) || Math.floor(limitMB * 0.8);
+        const { rssMB } = sessionHost.stats();
+        if (rssMB > ceilingMB) {
+            console.log(`⚠️  Not starting ${sessionId}: memory ${rssMB}MB is over the ${ceilingMB}MB safety ceiling.`);
+            return { success: false, message: `Server memory is nearly full (${rssMB}MB/${ceilingMB}MB). Try again later.` };
+        }
+    }
+
     const instanceDir = path.join(INSTANCES_DIR, sessionId);
     if (!fs.existsSync(instanceDir)) fs.mkdirSync(instanceDir, { recursive: true });
 
@@ -131,21 +149,31 @@ function deployInstance({ sessionId, botConfig, spawn: shouldSpawn = true }) {
     // resolve their per-user data (session/, config.env, database/) via
     // process.cwd() rather than __dirname, so this still isolates each
     // instance's creds/settings/economy/etc — only the CODE is now shared.
-    const child = spawn('node', [path.join(__dirname, 'bot.js')], {
-        cwd: instanceDir,
-        env: childEnv,
-        stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
-        detached: false
-    });
-
-    // Hand the session straight to the child over IPC (instant, no disk, no GitHub round trip).
-    child.send({ type: 'init', blob: bootBlob });
-    // The child sends back its updated (size-capped) session; we keep it + save it to GitHub.
-    child.on('message', (msg) => handleChildMessage(sessionId, msg));
-
     const logPrefix = `[bot:${sessionId.slice(0, 20)}]`;
-    child.stdout.on('data', d => { pushLog(sessionId, d); process.stdout.write(`${logPrefix} ${d}`); });
-    child.stderr.on('data', d => { pushLog(sessionId, d); process.stderr.write(`${logPrefix} ${d}`); });
+    let child;
+    if (IN_PROCESS) {
+        // Runs bot.js inside this process, isolated per session (see sessionHost.js).
+        child = sessionHost.startSession({
+            sessionId,
+            dir: instanceDir,
+            env: childEnv,
+            onMessage: (msg) => handleChildMessage(sessionId, msg),
+            onLog: (d) => { pushLog(sessionId, d); process.stdout.write(`${logPrefix} ${d}`); }
+        });
+        // Hand the session straight to the bot (instant, no disk, no GitHub round trip).
+        child.send({ type: 'init', blob: bootBlob });
+    } else {
+        child = spawn('node', [path.join(__dirname, 'bot.js')], {
+            cwd: instanceDir,
+            env: childEnv,
+            stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+            detached: false
+        });
+        child.send({ type: 'init', blob: bootBlob });
+        child.on('message', (msg) => handleChildMessage(sessionId, msg));
+        child.stdout.on('data', d => { pushLog(sessionId, d); process.stdout.write(`${logPrefix} ${d}`); });
+        child.stderr.on('data', d => { pushLog(sessionId, d); process.stderr.write(`${logPrefix} ${d}`); });
+    }
 
     runningProcesses.set(sessionId, child);
 
@@ -287,7 +315,7 @@ async function restoreInstances() {
         } catch (e) {
             console.log(`❌ Failed to restore ${instance.sessionId} (threw): ${e.message}`);
         }
-        await new Promise(r => setTimeout(r, 2500)); // stagger so WhatsApp + RAM aren't hit at once
+        await new Promise(r => setTimeout(r, IN_PROCESS ? 1500 : 2500)); // stagger so WhatsApp + RAM aren't hit at once
     }
     console.log(`♻️  Restore done — ${started} bot(s) started.`);
 }
@@ -333,8 +361,24 @@ function removeInstance(sessionId) {
     // This is the piece that was missing: local folders were being
     // deleted (when this ran at all) but the GitHub copies never were,
     // so sessions/<id>.json and its instances.json entry just piled up.
-    githubSync.deleteSessionFiles(sessionId).catch(() => {});
-    githubSync.deleteInstanceEntry(sessionId).catch(() => {});
+    // Forget this session's Telegram "already paired" record too, so that person
+    // can /pair again cleanly (and admin lists don't show a dead bot).
+    try {
+        for (const u of pairedUsers.getAllPairedUsers()) {
+            if (u && u.instanceId === sessionId && u.telegramId != null) pairedUsers.removePairing(u.telegramId);
+        }
+    } catch (_) {}
+
+    // Delete the session from GitHub for good. Runs in the background but RETRIES:
+    // 3 passes ~8s apart, so a save that was already in flight when the user
+    // disconnected can't leave the file behind.
+    (async () => {
+        for (let pass = 0; pass < 3; pass++) {
+            try { await githubSync.deleteSessionFiles(sessionId); } catch (_) {}
+            try { await githubSync.deleteInstanceEntry(sessionId); } catch (_) {}
+            if (pass < 2) await new Promise(r => setTimeout(r, 8000));
+        }
+    })();
 
     return { success: true, message: 'Instance removed.' };
 }
@@ -469,5 +513,6 @@ module.exports = {
     getInstance,
     getInstanceLogs,
     countRunning,
-    MAX_CONCURRENT_INSTANCES
+    MAX_CONCURRENT_INSTANCES,
+    hostStats: () => sessionHost.stats()
 };

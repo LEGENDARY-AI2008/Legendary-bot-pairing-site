@@ -13,14 +13,15 @@ const blobs = new Map();      // id -> latest compact blob (what's persisted)
 const pushedBlob = new Map(); // id -> last blob confirmed on GitHub
 const fullBlobs = new Map();  // id -> uncapped blob, used ONCE to boot the child fast
 const timers = new Map();
+const dead = new Set();       // ids deleted for good: never saved/pushed again (stops a late write re-creating the file)
 
 function set(id, blob) {
-    if (!blob) return;
+    if (!blob || dead.has(id)) return;
     blobs.set(id, blob);
     schedulePush(id);
 }
 
-function setFullOnce(id, full) { if (full) fullBlobs.set(id, full); }
+function setFullOnce(id, full) { if (full && !dead.has(id)) fullBlobs.set(id, full); }
 
 /** Blob to boot a child with: uncapped one if we still have it, else the saved one. */
 function takeBootBlob(id) {
@@ -38,6 +39,7 @@ function schedulePush(id, immediate = false) {
 }
 
 async function pushNow(id) {
+    if (dead.has(id)) return;
     const blob = blobs.get(id);
     if (!blob || pushedBlob.get(id) === blob) return;
     try {
@@ -53,6 +55,7 @@ async function pushNow(id) {
 
 /** Make sure the blob is in memory (fetch + shrink legacy bundles from GitHub if needed). */
 async function ensure(id) {
+    if (dead.has(id)) return null;
     if (blobs.has(id)) return blobs.get(id);
     let text;
     try { text = await githubSync.fetchSessionText(id); } catch (e) {
@@ -83,6 +86,7 @@ async function ensure(id) {
 }
 
 function remove(id) {
+    dead.add(id);
     blobs.delete(id); pushedBlob.delete(id); fullBlobs.delete(id);
     if (timers.has(id)) { clearTimeout(timers.get(id)); timers.delete(id); }
 }

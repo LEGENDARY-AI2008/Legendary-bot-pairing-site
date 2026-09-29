@@ -240,7 +240,12 @@ async function startBot() {
         }
 
         if (connection === 'close') {
-            const shouldReconnect = lastDisconnect?.error?.output?.statusCode !== DisconnectReason.loggedOut;
+            const statusCode = lastDisconnect?.error?.output?.statusCode;
+            // PERMANENT disconnects — the person unlinked the bot from their phone (401) or
+            // WhatsApp banned/blocked the linked device (403). No point retrying: exit(75)
+            // makes instanceManager delete this session everywhere, immediately.
+            const permanent = statusCode === DisconnectReason.loggedOut || statusCode === 403;
+            const shouldReconnect = !permanent;
             console.log(chalk.red(`Connection closed. Reconnecting: ${shouldReconnect}`));
             if (shouldReconnect) {
                 if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
@@ -267,7 +272,7 @@ async function startBot() {
                 // local folder, DB entry, and its GitHub backups — instead of
                 // respawning a bot that can never reconnect, or leaving it behind
                 // forever taking up space.
-                console.log(chalk.red('Session logged out permanently — exiting for cleanup.'));
+                console.log(chalk.red(`🗑️ User disconnected (code ${statusCode}) — deleting this session everywhere now.`));
                 process.exit(75);
             }
         }
