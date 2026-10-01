@@ -376,9 +376,9 @@
   },
   "r9d89a24b051a87": {
     "sessionId": "r9d89a24b051a87",
-    "pid": 66,
+    "pid": 64,
     "status": "running",
-    "deployedAt": "2026-10-01T19:50:48.052Z",
+    "deployedAt": "2026-10-01T19:53:24.680Z",
     "botConfig": {
       "ownerNumber": "2349068182160",
       "ownerName": "WhatsApp User",
