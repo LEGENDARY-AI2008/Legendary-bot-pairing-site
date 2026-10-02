@@ -373,20 +373,5 @@
     },
     "intentionalStop": false,
     "crashCount": 0
-  },
-  "rba62bf095fabb3": {
-    "sessionId": "rba62bf095fabb3",
-    "pid": 63,
-    "status": "running",
-    "deployedAt": "2026-10-02T13:07:19.786Z",
-    "botConfig": {
-      "ownerNumber": "2349166483814",
-      "ownerName": "Kraliçe",
-      "botName": "LËGĒNDÃRY BØT",
-      "prefix": ".",
-      "workType": "private"
-    },
-    "intentionalStop": false,
-    "crashCount": 0
   }
 }
